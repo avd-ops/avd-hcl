@@ -103,6 +103,25 @@ jobs:
   # -------------------------------------------------------------------------
   # Secret scanning (Section 14). This is the CI backstop; the local
   # pre-commit hook in .githooks/ is the primary control.
+  #
+  # Deliberately the gitleaks CLI, not gitleaks/gitleaks-action@v2. The action
+  # scans only the commit range of the triggering event, which broke twice:
+  #
+  #   push  — the range is `<first-pushed-commit>^..<last>`. When the push
+  #           contains the repo's root commit, `<root>^` is not a valid
+  #           revision, git aborts, and the action exits 1 having scanned
+  #           nothing. It reports "no leaks found in partial scan" on the way
+  #           out, which is the worst possible failure mode for a secret
+  #           scanner: a red build whose log says clean.
+  #   PR    — it calls the pulls API for the commit list, which needs
+  #           `pull-requests: read` (and `write` if it posts a comment).
+  #           Without it: "Resource not accessible by integration".
+  #
+  # Scanning full history every run removes both failure modes, needs no
+  # GITHUB_TOKEN and no added permissions, and is what Section 14 actually
+  # asks for -- a real backstop for a commit where the local hook was skipped.
+  # A history scan is also the Jul 27 pre-public task, made continuous rather
+  # than a one-shot. The repo is small; the whole scan is under a second.
   # -------------------------------------------------------------------------
   secret-scan:
     name: gitleaks
@@ -110,13 +129,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # gitleaks scans history, not just the tip commit
+          fetch-depth: 0 # full history — a shallow clone would silently scan less
 
-      - uses: gitleaks/gitleaks-action@v2
+      # Pinned. An unpinned scanner can change its ruleset under you and turn a
+      # passing build into a false sense of security (or a surprise red).
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # GITLEAKS_LICENSE is only required for GitHub *organization* repos.
-          # Not needed while this lives under a personal account.
+          GITLEAKS_VERSION: 8.30.1 # matches .githooks/pre-commit's expectation
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      # Non-zero exit on any finding fails the job. --redact keeps a real secret
+      # out of the public build log, which is otherwise a second leak.
+      - name: Scan full history
+        run: gitleaks git --redact --verbose .
 
 # ---------------------------------------------------------------------------
 # Stretch goal (Section 15) — do NOT enable before 7/29. A `what-if` validation
