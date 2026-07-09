@@ -26,10 +26,15 @@ jobs:
       - name: Install Bicep CLI
         run: az bicep install && az bicep version
 
+      # Warnings are failures here. `az bicep build` exits 0 on a warning, and the
+      # warnings that matter are not stylistic: BCP245 ("can only be used with the
+      # 'existing' keyword") means the resource will not deploy at all. A module
+      # that compiles to a template which quietly does nothing is exactly the class
+      # of failure this lab is built to expose, not tolerate.
       - name: Build each module
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           shopt -s nullglob
           modules=(bicep/modules/*.bicep)
           if [ ${#modules[@]} -eq 0 ]; then
@@ -39,7 +44,14 @@ jobs:
           fail=0
           for m in "${modules[@]}"; do
             echo "::group::$m"
-            az bicep build --file "$m" --stdout > /dev/null || fail=1
+            stderr=$(az bicep build --file "$m" --stdout 2>&1 >/dev/null) || { fail=1; }
+            if [ -n "$stderr" ]; then
+              echo "$stderr"
+              echo "::error file=$m::bicep emitted diagnostics (warnings are errors here)"
+              fail=1
+            else
+              echo "clean"
+            fi
             echo "::endgroup::"
           done
           exit $fail
