@@ -91,7 +91,7 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
 
 **Tooling:**
 - PowerShell 7+
-- Az PowerShell modules: `Az.Accounts`, `Az.Resources` (covers Bicep deployment via `New-AzResourceGroupDeployment -TemplateFile *.bicep` — no separate az CLI dependency needed)
+- Az PowerShell modules: `Az.Accounts`, `Az.Resources` (covers Bicep deployment via `New-AzResourceGroupDeployment -TemplateFile *.bicep` — no separate az CLI dependency needed), `Az.Storage` (share verification in `Test-AvdLabDeployment.ps1`, and the imperative fallback for the Section 6 Kerberos toggle)
 - Bicep CLI/VS Code extension for authoring and local linting (`az bicep install`, or VS Code Bicep extension)
 - Microsoft Graph PowerShell SDK: `Microsoft.Graph.Authentication`, `Microsoft.Graph.Users`, `Microsoft.Graph.Groups` (for demo user/group assignment)
 
@@ -123,7 +123,7 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
       hostpool.bicep          # host pool + registration token output
       workspace.bicep
       appgroup.bicep          # desktop app group, associate to workspace
-      storage.bicep           # storage account + FSLogix share (AAD Kerberos props where supported)
+      storage.bicep           # storage account + FSLogix share, incl. directoryServiceOptions: 'AADKERB' (Bicep-native — see Section 6)
       sessionhosts.bicep      # N VMs, no public IP, AADLoginForWindows extension, AVD agent/boot loader install
       monitoring.bicep        # Log Analytics Workspace (30-day default retention, scoped diagnostic categories — Section 7), AVD diagnostic settings, DCR + AMA on session hosts, Azure Budget + action group email alert (cost guardrail — alert only, not auto-teardown)
       scalingplan.bicep
@@ -133,7 +133,7 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
     Deploy-AvdLab.ps1         # orchestrator — calls modules in sequence, narrates progress
     Initialize-AvdLabPrerequisites.ps1 # greenfield setup runbook — run once, up front (Section 19)
     Remove-AvdLab.ps1         # teardown
-    Set-AvdLabFSLogixAuth.ps1 # Azure AD Kerberos enablement (not a clean Bicep resource property)
+    Set-AvdLabFSLogixAuth.ps1 # post-Kerberos Entra app registration fixups — Graph, not ARM (Section 6)
     Add-AvdLabAssignments.ps1 # Graph calls — assign demo users/groups to app group
     Test-AvdLabDeployment.ps1 # smoke test after deployment
     New-AvdLabReport.ps1      # as-built doc on success, evidence bundle on failure/on-demand (Section 17)
@@ -187,17 +187,43 @@ Each step is a discrete `New-AzResourceGroupDeployment` call rather than one gia
 
 ## 6. FSLogix + Entra ID Join — the one item to de-risk early
 
-Because there's no AD DS or Entra Domain Services in this design, FSLogix profile access to Azure Files depends on **Azure AD Kerberos for Azure Files**, not traditional Kerberos. This splits across the Bicep/PowerShell boundary:
+Because there's no AD DS or Entra Domain Services in this design, FSLogix profile access to Azure Files depends on **Microsoft Entra Kerberos for Azure Files**, not traditional Kerberos.
 
-- **Bicep-native (`storage.bicep`):** storage account creation, SMB protocol settings, share creation, network rules — all clean resource properties.
-- **Not Bicep-native (`Set-AvdLabFSLogixAuth.ps1`):** the actual Azure AD Kerberos enablement has historically leaned on Az PowerShell cmdlets rather than ARM/Bicep resource properties directly. This stays a scripted post-deployment step, run by the orchestrator right after `storage.bicep` completes.
+> **Verified against live docs 2026-07-09 — this section was rewritten as a result.** The original spec assumed Kerberos enablement was not an ARM resource property and had to be scripted. That is no longer true. The boundary moved; the risk did not disappear, it relocated.
+
+**Bicep-native (`storage.bicep`)** — storage account, SMB settings, share creation, network rules, *and the Kerberos toggle itself*:
+
+```bicep
+properties: {
+  azureFilesIdentityBasedAuthentication: {
+    directoryServiceOptions: 'AADKERB'   // valid on API 2025-01-01 → 2026-04-01
+  }
+}
+```
+
+For cloud-only identities (which is what Easy Mode uses), no `activeDirectoryProperties` block is needed — `domainName`/`domainGuid` are only required for hybrid identities configuring ACLs through File Explorer. Keeping this declarative means a re-run converges instead of silently drifting, which is the whole reason the rest of the build is Bicep.
+
+`Set-AzStorageAccount -EnableAzureActiveDirectoryKerberosForFile $true` still exists in current `Az.Storage` and remains a valid imperative fallback if the ARM property misbehaves on the day.
+
+**Not Bicep-native (`Set-AvdLabFSLogixAuth.ps1`)** — enabling the toggle creates an Entra app registration for the storage account, and three things must then be done *to that app registration*. All are Microsoft Graph, all need Global Admin, none are ARM resources:
+
+1. **Grant admin consent** to the new service principal — lets users request Entra tokens for the storage account.
+2. **Exclude the storage account's service principal from MFA.** Kerberos ticket acquisition happens silently during user logon; there is no UI to satisfy a step-up prompt. This directly intersects the Security Defaults / Conditional Access pre-flight check in Section 3 — if Security Defaults is on in the demo tenant, this is not optional.
+3. **Add the `kdc_enable_cloud_group_sids` app manifest tag.** *Mandatory for cloud-only identities.* Without it, Entra issues Kerberos tickets that omit cloud-only group SIDs, and share permissions granted to an Entra group will not resolve. This is the step most likely to fail quietly on stage, because everything looks correctly configured right up until a profile fails to load.
+
+**Client-side (`sessionhosts.bicep`, via Custom Script Extension)** — two registry values on every session host, plus FSLogix's own `Enabled` / `VHDLocations`:
+
+- `HKLM\SYSTEM\CurrentControlSet\Control\Lsa\Kerberos\Parameters\CloudKerberosTicketRetrievalEnabled = 1`
+- `HKLM\Software\Policies\Microsoft\AzureADAccount\LoadCredKeyFromProfile = 1`
+
+FSLogix itself ships pre-installed on the Windows Enterprise multi-session marketplace images — it only needs configuring, not installing.
 
 Before building the rest of the solution:
-- Confirm your target region supports Azure AD Kerberos for Azure Files (still has some regional/config constraints)
-- Confirm the Az module version you're scripting against exposes the cmdlets you need — this has shifted across releases, verify against current docs rather than assuming from memory
-- Have a fallback for the live demo: if Kerberos auth won't cooperate on stage, a local-profile fallback (no FSLogix) still lets the rest of the demo (host pool, autoscale, app group) run without a blocked dependency
+- Confirm your target region supports Entra Kerberos for Azure Files. Note the cloud-only identity path is **Azure Commercial only** — which is consistent with Section 1's Commercial-only scope, and is a further reason GovCloud (Section 13, v5) is a parallel variant rather than a config flag.
+- **The RC4 → AES-SHA1 Kerberos hardening already shipped** in the April 2026 Windows update. This is a live constraint today, not a future one: file shares hosting FSLogix containers that weren't upgraded to AES-SHA1 have access issues. Build on AES-SHA1 from the start.
+- Have a fallback for the live demo: if Kerberos auth won't cooperate on stage, a local-profile fallback (no FSLogix) still lets the rest of the demo (host pool, autoscale, app group) run without a blocked dependency.
 
-Prototype this piece in isolation first — it's the one dependency that doesn't fit neatly into "just run the Bicep," and the one most likely to eat your pre-presentation buffer time if left until last.
+Prototype the **Graph steps** in isolation first. The Bicep toggle is now boring; the app-registration fixups are where the pre-presentation buffer time actually goes.
 
 ---
 
@@ -220,7 +246,7 @@ param sessionHostCount = 3
 param vmSize = 'Standard_D4ads_v5'
 param imagePublisher = 'MicrosoftWindowsDesktop'
 param imageOffer = 'windows-11'
-param imageSku = 'win11-23h2-avd' // verify current SKU name at build time — see Section 12, this example is likely stale by the time you're actually building
+param imageSku = 'win11-25h2-avd' // verified 2026-07-09. Supported to 2028-10-10. Alternative: win11-24h2-avd (to 2027-10-12). Do NOT use win11-23h2-avd — end of updates 2026-11-10, i.e. weeks after the September demo. Re-verify during the Section 18 drift check.
 param fslogixStorageAccountName = 'stavdlabfslogix'
 param fslogixShareName = 'profiles'
 param logAnalyticsWorkspaceName = 'log-avdlab-weuc'
@@ -292,10 +318,12 @@ Naming convention: `<resourceType>-avdlab-<qualifier>` across both layers — ke
 
 ## 12. Open Risks to Resolve Before Coding
 
-- Azure AD Kerberos for FSLogix: regional availability + current Az module cmdlet support (verify against live docs, not memory)
+- ~~Azure AD Kerberos for FSLogix: regional availability + current Az module cmdlet support~~ — **RESOLVED 2026-07-09.** The toggle is an ARM property (`directoryServiceOptions: 'AADKERB'`), not a cmdlet-only operation; `Set-AzStorageAccount -EnableAzureActiveDirectoryKerberosForFile` remains as a fallback. Section 6 rewritten. Residual risk moved to the three Graph app-registration steps, of which `kdc_enable_cloud_group_sids` (mandatory for cloud-only) was missing from the original spec entirely.
+- ~~Marketplace image SKU name~~ — **RESOLVED 2026-07-09.** `win11-25h2-avd`. See Section 7. Still re-verify at the Section 18 drift check.
+- **NEW: RC4 → AES-SHA1 Kerberos hardening already shipped** (April 2026 Windows update). Not a future risk — a present constraint on the FSLogix file share. Confirm the share is on AES-SHA1.
+- **NEW: MFA exclusion for the storage account service principal** is required for silent Kerberos ticket acquisition at logon. If the demo tenant has Security Defaults on (the greenfield default, Section 19), this collides with it. Verify before presentation day, not on it.
 - Licensing confirmation for Win11 Enterprise multi-session in the demo tenant
 - Custom image vs. marketplace image tradeoff — decide based on how tight the live demo window actually is
-- Marketplace image SKU name — `win11-23h2-avd` in Section 7 is an example, not a confirmed current value; verify the actual current SKU when `sessionhosts.bicep` gets built (Week 2), and again during the Section 18 drift re-validation before September
 - Budget alert needs a real recipient — decide whose email goes in the gitignored local override for `budgetAlertEmail` before the first deployment, not after
 
 ---
