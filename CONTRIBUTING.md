@@ -2,7 +2,7 @@
 
 ## Secrets & leak prevention
 
-This repo is public. Treat every commit as permanent and world-readable, because once pushed, it is.
+This repo is private today and goes public at the `v1.0.0` release. Treat every commit as permanent and world-readable from now anyway: flipping visibility exposes the entire history at once, so a real value committed today is a leak on release day, not a mistake you get to quietly delete beforehand.
 
 **Tracked files hold placeholders only.** `bicep/parameters/avdlab.bicepparam` and `orchestrator.config.json` carry `<YOUR_SUBSCRIPTION_ID>`-style tokens and nothing else. Your real subscription ID, tenant ID, demo group object ID, and budget alert email go in a local override that git never sees:
 
