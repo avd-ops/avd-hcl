@@ -93,7 +93,9 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
 - PowerShell 7+
 - Az PowerShell modules: `Az.Accounts`, `Az.Resources` (covers Bicep deployment via `New-AzResourceGroupDeployment -TemplateFile *.bicep` — no separate az CLI dependency needed), `Az.Storage` (share verification in `Test-AvdLabDeployment.ps1`, and the imperative fallback for the Section 6 Kerberos toggle)
 - Bicep CLI/VS Code extension for authoring and local linting (`az bicep install`, or VS Code Bicep extension)
-- Microsoft Graph PowerShell SDK: `Microsoft.Graph.Authentication`, `Microsoft.Graph.Users`, `Microsoft.Graph.Groups` (for demo user/group assignment)
+- Microsoft Graph PowerShell SDK: `Microsoft.Graph.Authentication`, `Microsoft.Graph.Users`, `Microsoft.Graph.Groups` (demo user/group assignment), `Microsoft.Graph.Applications` + `Microsoft.Graph.Identity.SignIns` (the Section 6 app-registration and Conditional Access work in `Set-AvdLabFSLogixAuth.ps1`)
+
+> `Initialize-AvdLabPrerequisites.ps1` deliberately needs none of the Graph SDK beyond `Microsoft.Graph.Authentication`, and no `Az.Compute` — it issues its checks through `Invoke-MgGraphRequest`/`Invoke-AzRestMethod` rather than the typed cmdlets. Making someone install three extra modules before a *prerequisite checker* will start is a poor first impression, and it's the one script guaranteed to run on a machine that has never touched this project.
 
 **Azure:**
 - Subscription with Contributor + User Access Administrator (or Owner) on the target RG
