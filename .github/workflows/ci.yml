@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: no job here needs write access to the repo.
+permissions:
+  contents: read
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Compiles every Bicep module. `build` (not `lint`) is deliberate — it
+  # catches semantic errors (bad resource types, unresolved symbols) that a
+  # lint pass alone lets through.
+  # -------------------------------------------------------------------------
+  bicep-build:
+    name: Bicep build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Bicep CLI
+        run: az bicep install && az bicep version
+
+      - name: Build each module
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          modules=(bicep/modules/*.bicep)
+          if [ ${#modules[@]} -eq 0 ]; then
+            echo "No Bicep modules yet — skipping. (Week 1 scaffold.)"
+            exit 0
+          fi
+          fail=0
+          for m in "${modules[@]}"; do
+            echo "::group::$m"
+            az bicep build --file "$m" --stdout > /dev/null || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Build parameter files
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          params=(bicep/parameters/*.bicepparam)
+          if [ ${#params[@]} -eq 0 ]; then
+            echo "No .bicepparam files yet — skipping."
+            exit 0
+          fi
+          fail=0
+          for p in "${params[@]}"; do
+            echo "::group::$p"
+            az bicep build-params --file "$p" --stdout > /dev/null || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
+
+  # -------------------------------------------------------------------------
+  # Pester: parameter validation + naming-convention + repo-hygiene checks.
+  # -------------------------------------------------------------------------
+  pester:
+    name: Pester tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser
+
+      - name: Run Pester
+        shell: pwsh
+        run: |
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path = './tests'
+          $cfg.Run.Exit = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          $cfg.TestResult.Enabled = $true
+          $cfg.TestResult.OutputPath = 'testResults.xml'
+          Invoke-Pester -Configuration $cfg
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: testResults.xml
+          if-no-files-found: ignore
+
+  # -------------------------------------------------------------------------
+  # Secret scanning (Section 14). This is the CI backstop; the local
+  # pre-commit hook in .githooks/ is the primary control.
+  # -------------------------------------------------------------------------
+  secret-scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks scans history, not just the tip commit
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is only required for GitHub *organization* repos.
+          # Not needed while this lives under a personal account.
+
+# ---------------------------------------------------------------------------
+# Stretch goal (Section 15) — do NOT enable before 7/29. A `what-if` validation
+# job against a real subscription using GitHub OIDC federated credentials
+# (no stored secrets). Left commented out intentionally.
+#
+#  whatif:
+#    name: what-if (live subscription)
+#    runs-on: ubuntu-latest
+#    permissions:
+#      id-token: write   # required for OIDC federated login
+#      contents: read
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: azure/login@v2
+#        with:
+#          client-id: ${{ vars.AZURE_CLIENT_ID }}
+#          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+#          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+#      - run: az deployment group what-if -g ${{ vars.AZURE_RG }} -f bicep/modules/network.bicep
+# ---------------------------------------------------------------------------

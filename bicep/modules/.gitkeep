@@ -1,0 +1,3 @@
+# Bicep modules land here.
+# Build order (CLAUDE.md Section 10): network, storage, hostpool, workspace,
+# appgroup, sessionhosts, monitoring, scalingplan.

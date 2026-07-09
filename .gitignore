@@ -1,0 +1,26 @@
+# ---------------------------------------------------------------------------
+# Local parameter overrides — NEVER commit these. See CONTRIBUTING.md.
+# Tracked parameter files hold placeholders only; real subscription/tenant/
+# group IDs and email addresses live here and stay on your machine.
+# ---------------------------------------------------------------------------
+*.local.bicepparam
+*.local.config.json
+orchestrator.local.config.json
+
+# Generated reports (as-built / evidence bundles)
+/reports/
+/out/
+
+# Bicep build artifacts (`az bicep build` emits <module>.json next to the source)
+/bicep/modules/*.json
+
+# PowerShell / editor noise
+*.psd1.bak
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

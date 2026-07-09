@@ -1,0 +1,41 @@
+#!/bin/sh
+# AVD Lab Kit — pre-commit secret scan (CLAUDE.md Section 14).
+#
+# This is the *primary* leak-prevention control: it stops a real subscription
+# ID, tenant ID, or key from entering a commit at all. The CI job and GitHub's
+# push protection are backstops behind it, not substitutes for it.
+#
+# Enable once per clone:   git config core.hooksPath .githooks
+#
+# If gitleaks is missing this hook FAILS the commit rather than passing
+# silently. A scanner that quietly no-ops is worse than no scanner, because it
+# reads as protection you don't actually have.
+
+set -e
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "----------------------------------------------------------------------"
+  echo "BLOCKED: gitleaks is not installed, so staged changes were NOT scanned."
+  echo ""
+  echo "  Install it:  winget install gitleaks"
+  echo "               (or) https://github.com/gitleaks/gitleaks/releases"
+  echo ""
+  echo "This hook fails closed on purpose (see CONTRIBUTING.md)."
+  echo "To bypass for a single commit you know is clean:  git commit --no-verify"
+  echo "----------------------------------------------------------------------"
+  exit 1
+fi
+
+echo "gitleaks: scanning staged changes..."
+if ! gitleaks protect --staged --redact --verbose; then
+  echo ""
+  echo "----------------------------------------------------------------------"
+  echo "BLOCKED: gitleaks found a potential secret in your staged changes."
+  echo ""
+  echo "Do NOT just delete the line and re-commit — if it was ever committed,"
+  echo "it stays in history. Rotate the credential, then scrub it."
+  echo "----------------------------------------------------------------------"
+  exit 1
+fi
+
+exit 0
