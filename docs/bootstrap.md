@@ -60,8 +60,10 @@ Now let the script tell you where you stand.
 ./scripts/Initialize-AvdLabPrerequisites.ps1 `
     -SubscriptionId <your-subscription-guid> `
     -TenantId <your-tenant-guid> `
-    -OutputPath ./readiness.json
+    -OutputPath ./reports/readiness.json
 ```
+
+> **Write the report to `./reports/`, not the repo root.** It records your real subscription and tenant IDs. `/reports/` is gitignored; the root is not, and the Pester leak tests only scan `.bicepparam`, `.config.json`, and `.bicep` files — a stray `readiness.json` at the root would sail into a commit uncaught.
 
 It registers the four resource providers (idempotent) and reports the rest. Work through whatever it flags using the sections below. Re-run it as often as you like.
 

@@ -54,7 +54,7 @@ Both parameters are required — passing them explicitly means a stale `Az` cont
     -TenantId <your-tenant-guid>
 ```
 
-Useful switches: `-WhatIf` shows what it would register without registering it; `-OutputPath ./readiness.json` saves the report; `-Location`, `-VmSize`, and `-SessionHostCount` must match your parameter file if you've changed them, since they drive the quota check.
+Useful switches: `-WhatIf` shows what it would register without registering it; `-OutputPath ./reports/readiness.json` saves the report (write it to `./reports/`, which is gitignored — the report contains your real subscription and tenant IDs); `-Location`, `-VmSize`, and `-SessionHostCount` must match your parameter file if you've changed them, since they drive the quota check.
 
 It **registers** the four required resource providers for you (idempotent, safe to re-run). It **reports** on everything it can't safely fix: vCPU quota, Windows 11 Enterprise multi-session licensing, Entra ID Security Defaults, Conditional Access, MDM auto-enrollment scope, and whether your identity actually holds the roles the deployment needs.
 
