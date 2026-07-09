@@ -98,6 +98,116 @@ Describe 'Leak prevention (Section 14)' {
     }
 }
 
+Describe 'Parameter file (avdlab.bicepparam)' {
+    <#
+        avdlab.bicepparam uses `using none`, so Bicep does not type-check its values
+        against any module (a single param file bound to one template cannot carry
+        eight modules' parameters -- BCP259). These tests are what we traded that
+        compile-time safety for. If they are ever deleted, a typo'd parameter name
+        becomes a silently ignored value.
+    #>
+
+    BeforeAll {
+        $script:ParamFile = Join-Path $ParamDir 'avdlab.bicepparam'
+
+        # Parameters the orchestrator supplies at runtime, so they must NOT appear
+        # in the tracked file: module outputs, generated secrets, time-derived values.
+        $script:RuntimeInjected = @(
+            'hostPoolId'            # output of hostpool.bicep
+            'applicationGroupIds'   # output of appgroup.bicep
+            'registrationToken'     # output of hostpool.bicep (secret)
+            'tokenExpirationTime'   # dateTimeAdd(utcNow(), ...) default
+            'adminPassword'         # generated at runtime, never stored (Section 5)
+        )
+
+        # Names legitimately shared, with the same meaning, across every module.
+        # Any OTHER name declared by more than one module is ambiguous and must not
+        # be assigned in a flat param file -- it would splat into all of them.
+        $script:SharedParams = @('location', 'tags')
+
+        # Params for modules not yet written. Listed explicitly so this test reports
+        # a real gap rather than quietly tolerating anything unrecognized.
+        $script:FutureModuleParams = @(
+            'sessionHostCount', 'vmSize', 'imagePublisher', 'imageOffer', 'imageSku'
+            'logAnalyticsWorkspaceName', 'logAnalyticsRetentionDays'
+            'budgetAmount', 'budgetAlertEmail', 'costGuardrailMode'
+        )
+
+        # name -> list of modules declaring it, and which are required (no default).
+        $script:Declared = @{}
+        $script:Required = @{}
+        Get-ChildItem $ModuleDir -Filter '*.bicep' -File | ForEach-Object {
+            $module = $_.BaseName
+            foreach ($line in Get-Content $_.FullName) {
+                if ($line -match '^param\s+(\w+)\s+[\w\[\]]+\s*$') {
+                    $name = $Matches[1]
+                    if (-not $Required.ContainsKey($name)) { $Required[$name] = @() }
+                    $Required[$name] += $module
+                }
+                if ($line -match '^param\s+(\w+)\s') {
+                    $name = $Matches[1]
+                    if (-not $Declared.ContainsKey($name)) { $Declared[$name] = @() }
+                    $Declared[$name] += $module
+                }
+            }
+        }
+
+        # Assigned parameter names, taken from the compiled output rather than
+        # regexed out of the source -- if it doesn't compile, nothing else matters.
+        $compiled = az bicep build-params --file $ParamFile --stdout 2>$null | ConvertFrom-Json
+        $script:Assigned = if ($compiled) {
+            ($compiled.parametersJson | ConvertFrom-Json).parameters.PSObject.Properties.Name
+        }
+        else { @() }
+    }
+
+    It 'compiles with az bicep build-params' {
+        $ParamFile | Should -Exist
+        $Assigned.Count | Should -BeGreaterThan 0 -Because 'a param file that does not compile emits nothing'
+    }
+
+    It 'declares `using none`' {
+        Get-Content $ParamFile -Raw | Should -Match '(?m)^using none\s*$'
+    }
+
+    It 'assigns no parameter that is unknown to every module' {
+        # Anything here is either a typo or a param for a module nobody has written.
+        $unknown = $Assigned |
+            Where-Object { -not $Declared.ContainsKey($_) } |
+            Where-Object { $_ -notin $FutureModuleParams }
+
+        $unknown | Should -BeNullOrEmpty -Because 'with `using none` a typo is silently ignored, not rejected'
+    }
+
+    It 'assigns no ambiguous parameter shared across modules with different meanings' {
+        # e.g. friendlyName means something different in hostpool/appgroup/workspace.
+        $ambiguous = $Assigned | Where-Object {
+            $Declared.ContainsKey($_) -and
+            $Declared[$_].Count -gt 1 -and
+            $_ -notin $SharedParams
+        }
+
+        $ambiguous | Should -BeNullOrEmpty -Because 'a flat file would splat one value into every module declaring the name'
+    }
+
+    It 'assigns no parameter the orchestrator injects at runtime' {
+        $leaked = $Assigned | Where-Object { $_ -in $RuntimeInjected }
+        $leaked | Should -BeNullOrEmpty -Because 'module outputs and generated secrets must never be pinned in a tracked file'
+    }
+
+    It "satisfies every required parameter of module '<_>'" -ForEach (
+        Get-ChildItem (Join-Path (Split-Path -Parent $PSScriptRoot) 'bicep/modules') -Filter '*.bicep' -File |
+            ForEach-Object { $_.BaseName }
+    ) {
+        $module = $_
+        $missing = $Required.Keys |
+            Where-Object { $module -in $Required[$_] } |
+            Where-Object { $_ -notin $Assigned -and $_ -notin $RuntimeInjected }
+
+        $missing | Should -BeNullOrEmpty -Because "deployment of $module would prompt for these"
+    }
+}
+
 Describe 'Bicep modules' {
     BeforeDiscovery {
         # Discovery-time lookup so -ForEach can expand over real files. Empty

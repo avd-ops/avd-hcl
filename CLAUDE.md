@@ -122,9 +122,9 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
   /bicep
     /modules
       network.bicep          # VNet, subnet, NSG, NAT gateway — no public IP on any session host, no inbound rules (explicit outbound egress, see Section 2)
-      hostpool.bicep          # host pool + registration token output
-      workspace.bicep
-      appgroup.bicep          # desktop app group, associate to workspace
+      hostpool.bicep          # host pool + @secure() registration token output (via listRegistrationTokens())
+      appgroup.bicep          # desktop app group; deploys BEFORE workspace (see orchestrator step 6)
+      workspace.bicep         # workspace; takes the app group ID and publishes it
       storage.bicep           # storage account + FSLogix share, incl. directoryServiceOptions: 'AADKERB' (Bicep-native — see Section 6)
       sessionhosts.bicep      # N VMs, no public IP, AADLoginForWindows extension, AVD agent/boot loader install
       monitoring.bicep        # Log Analytics Workspace (30-day default retention, scoped diagnostic categories — Section 7), AVD diagnostic settings, DCR + AMA on session hosts, Azure Budget + action group email alert (cost guardrail — alert only, not auto-teardown)
@@ -151,8 +151,8 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
 2. Deploy `network.bicep` → log step, deploy, capture outputs
 3. Deploy `storage.bicep` → capture storage account name/share
 4. Run `Set-AvdLabFSLogixAuth.ps1` (Azure AD Kerberos enablement — see Section 6)
-5. Deploy `hostpool.bicep` → capture registration token output
-6. Deploy `workspace.bicep`, then `appgroup.bicep`
+5. Deploy `hostpool.bicep` → capture registration token output (a `@secure()` output, obtained via `listRegistrationTokens()` — `registrationInfo.token` is write-only and a GET never returns it)
+6. Deploy `appgroup.bicep`, **then** `workspace.bicep` — this order is reversed from the original spec on purpose. The workspace↔app-group link is stored on the *workspace* as `applicationGroupReferences`, so creating the workspace first would mean deploying it twice: once empty, once with the reference. Building the app group first and passing its ID into `workspace.bicep` links them in one pass, with no window where the workspace exists publishing nothing
 7. Deploy `sessionhosts.bicep`, passing the registration token as a parameter
 8. Deploy `monitoring.bicep` — Log Analytics Workspace, AVD diagnostic settings, DCR/AMA association to session hosts
 9. Deploy `scalingplan.bicep`, associate to host pool
@@ -243,12 +243,19 @@ Prototype the **Graph steps** in isolation first. The Bicep toggle is now boring
 
 ## 7. Parameters
 
-**`avdlab.bicepparam`** (or `.parameters.json`) drives everything Bicep needs:
+**`avdlab.bicepparam`** drives everything Bicep needs.
+
+> **Corrected 2026-07-09 — the original `using 'modules/network.bicep'` form does not compile.** A `.bicepparam` binds to exactly one template and may only assign parameters that template declares; a single file spanning eight modules is rejected with `BCP259` ("assigned in the params file without being declared in the Bicep file"). Verified against Bicep CLI 0.44.1.
+>
+> The file therefore uses **`using none`**, which decouples it from any template and compiles standalone to a `deploymentParameters` JSON document. `Deploy-AvdLab.ps1` reads that document and passes each module only the parameters that module declares, via `-TemplateParameterObject`. Section 7's "single source of truth" survives intact; what's lost is compile-time type checking of values against modules, so a typo'd name would be silently ignored rather than rejected. `tests/AvdLab.Tests.ps1` closes that hole with four guards: the file compiles, every assigned name is declared by some module (or explicitly listed as belonging to a not-yet-built one), no name ambiguous across modules is assigned, and no runtime-injected value is pinned.
+>
+> **Name collisions are the non-obvious hazard of a flat file.** Parameter names are module-scoped: `friendlyName` means three different things in `hostpool.bicep`, `appgroup.bicep`, and `workspace.bicep`, so assigning it once would splat one string into all three. Only lab-wide values (`location`, `tags`) or unambiguously-named ones belong here. Anything whose name repeats with a different meaning is omitted and left to each module's default — the Pester suite enforces this.
+>
+> Two naming notes: the storage parameters are `storageAccountName`/`shareName` (matching what `storage.bicep` declares) rather than the `fslogixStorageAccountName`/`fslogixShareName` this section originally showed — with a splat, the names must match the module's. And `resourceGroupName` is not a Bicep parameter at all; it's a deployment scope the orchestrator supplies.
 
 ```bicep
-using 'modules/network.bicep'
+using none
 
-param resourceGroupName = 'rg-avdlab-weuc'
 param location = 'eastus2'
 param vnetName = 'vnet-avdlab'
 param vnetCidr = '10.20.0.0/24'
