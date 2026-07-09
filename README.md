@@ -44,6 +44,8 @@ az bicep install    # or the VS Code Bicep extension
 
 ## Check your subscription and tenant
 
+> **Starting from a fresh subscription or tenant?** [`docs/bootstrap.md`](docs/bootstrap.md) is the manual runbook: creating the tenant, elevating access (Global Administrator grants you nothing in Azure), the Security Defaults decision and its 30-day-trial trap, licensing, quota, and the demo group. The script below tells you *what* is wrong; that document tells you *how* to fix it.
+
 Both parameters are required — passing them explicitly means a stale `Az` context can't quietly prepare the wrong subscription.
 
 ```powershell
