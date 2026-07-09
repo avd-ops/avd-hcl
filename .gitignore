@@ -11,6 +11,12 @@ orchestrator.local.config.json
 /reports/
 /out/
 
+# Readiness reports carry real subscription/tenant IDs. They belong in /reports/,
+# but ignore them anywhere in case someone accepts a default output path.
+readiness.json
+*-readiness.json
+avd-readiness-report.json
+
 # Bicep build artifacts (`az bicep build` emits <module>.json next to the source)
 /bicep/modules/*.json
 
