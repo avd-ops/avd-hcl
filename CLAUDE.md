@@ -78,7 +78,7 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
 | Profile management | FSLogix on Azure Files | Standard for pooled — **see Section 6, the one non-trivial config item** |
 | Monitoring | Log Analytics Workspace + AVD Insights | Standard expectation even for a lab; self-contained, no Intune/AD dependency |
 | Scaling plan | Ramp-up/peak/ramp-down/off schedule | Visual, easy to narrate live |
-| Networking | Single VNet/subnet + NSG, no public IPs | No on-prem, no VPN/ExpressRoute needed since there's no AD DS. Session hosts have zero public IP and zero inbound NSG rule for RDP — AVD's reverse-connect transport means only outbound HTTPS (443) to the AVD service/Entra ID/Azure Files is required; there's no inbound connection to a session host at any point |
+| Networking | Single VNet/subnet + NSG + NAT gateway, no public IP on any session host | No on-prem, no VPN/ExpressRoute needed since there's no AD DS. Session hosts have zero public IP and zero inbound NSG rule for RDP — AVD's reverse-connect transport means only outbound HTTPS (443) to the AVD service/Entra ID/Azure Files is required; there's no inbound connection to a session host at any point. **Outbound is no longer free, though:** since the API versions released after 2026-03-31, new VNets default to private subnets (`defaultOutboundAccess: false`) and Azure no longer grants implicit egress. Without an explicit path the AVD agent can't register and the pool comes up empty. A NAT gateway supplies it — outbound only, and it owns the lab's single public IP. `defaultOutboundAccess` is set explicitly in `network.bicep` rather than inherited, so behavior doesn't silently change with the apiVersion string |
 | App group | Desktop app group | Simplest for demo; RemoteApp as an optional stretch goal |
 | Resource scoping | Everything in one Resource Group | Teardown = one `Remove-AzResourceGroup` call |
 | Subscription assumption | Brownfield-safe via dedicated RG isolation | Works alongside existing resources; no VNet peering or naming assumptions that would require an empty subscription |
@@ -119,7 +119,7 @@ Calling this out to the audience directly is a feature, not a caveat — "here's
 /AvdLabKit
   /bicep
     /modules
-      network.bicep          # VNet, subnet, NSG — no public IPs, no inbound rules (outbound HTTPS only, see Section 2)
+      network.bicep          # VNet, subnet, NSG, NAT gateway — no public IP on any session host, no inbound rules (explicit outbound egress, see Section 2)
       hostpool.bicep          # host pool + registration token output
       workspace.bicep
       appgroup.bicep          # desktop app group, associate to workspace
@@ -273,6 +273,7 @@ Naming convention: `<resourceType>-avdlab-<qualifier>` across both layers — ke
 - Consider a slide or two framing the Easy Mode/Hard Mode split up front — it sets audience expectations and gives you a natural close ("if you want to see Hard Mode, that's a future session")
 - The as-built report generated at the end of a successful run (Section 17) doubles as a genuine audience takeaway — "here's the document it just produced" — rather than console scrollback that's gone once the terminal closes
 - Zero public IP / no inbound RDP anywhere in the design (Section 2) is worth calling out explicitly to the audience — it's not a security corner cut for the sake of a simple demo, it's literally how AVD's reverse-connect transport works, and a good moment to correct a misconception some attendees may still have from pre-2019 RDP-based remote desktop patterns
+- **The NAT gateway is a deliberate talking point, not an implementation detail.** Default outbound access retired on 2026-03-31; VNets created with current API versions get private subnets and no implicit egress. Plenty of the audience still has templates that "just worked" and will quietly stop working the next time they bump an apiVersion — the failure mode is a host pool that deploys successfully and then sits empty, because the agent never reached the service to register. Pairs naturally with the reverse-connect beat above: one slide on "nothing gets in," one on "and getting out is now something you have to ask for." Show `defaultOutboundAccess: false` set explicitly and explain why inheriting the default is the actual trap
 
 ---
 
@@ -321,6 +322,7 @@ Naming convention: `<resourceType>-avdlab-<qualifier>` across both layers — ke
 - ~~Azure AD Kerberos for FSLogix: regional availability + current Az module cmdlet support~~ — **RESOLVED 2026-07-09.** The toggle is an ARM property (`directoryServiceOptions: 'AADKERB'`), not a cmdlet-only operation; `Set-AzStorageAccount -EnableAzureActiveDirectoryKerberosForFile` remains as a fallback. Section 6 rewritten. Residual risk moved to the three Graph app-registration steps, of which `kdc_enable_cloud_group_sids` (mandatory for cloud-only) was missing from the original spec entirely.
 - ~~Marketplace image SKU name~~ — **RESOLVED 2026-07-09.** `win11-25h2-avd`. See Section 7. Still re-verify at the Section 18 drift check.
 - **NEW: RC4 → AES-SHA1 Kerberos hardening already shipped** (April 2026 Windows update). Not a future risk — a present constraint on the FSLogix file share. Confirm the share is on AES-SHA1.
+- ~~Session hosts have no outbound path~~ — **RESOLVED 2026-07-09.** Default outbound access retired 2026-03-31; new VNets default to private subnets. `network.bicep` now deploys a NAT gateway and sets `defaultOutboundAccess: false` explicitly. Left unhandled this would have failed *silently*: every deployment succeeds, and the host pool simply never registers a host. Worth re-testing at the Section 18 drift check, since it's invisible in `what-if`.
 - **NEW: MFA exclusion for the storage account service principal** is required for silent Kerberos ticket acquisition at logon. If the demo tenant has Security Defaults on (the greenfield default, Section 19), this collides with it. Verify before presentation day, not on it.
 - Licensing confirmation for Win11 Enterprise multi-session in the demo tenant
 - Custom image vs. marketplace image tradeoff — decide based on how tight the live demo window actually is

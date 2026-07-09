@@ -71,11 +71,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Pester 5
+      # Pinned to the 6.x major. Validated against 6.0.0 locally; a future
+      # Pester 7 could change Run.Exit semantics and turn this gate into a
+      # no-op without anyone noticing.
+      - name: Install Pester
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
-          Install-Module Pester -MinimumVersion 5.5.0 -Force -Scope CurrentUser
+          Install-Module Pester -MinimumVersion 6.0.0 -MaximumVersion 6.999.999 -Force -Scope CurrentUser
+          (Get-Module -ListAvailable Pester | Sort-Object Version -Descending | Select-Object -First 1).Version
 
       - name: Run Pester
         shell: pwsh
