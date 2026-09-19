@@ -6,6 +6,7 @@ Read automatically by Claude Code at the start of every session in this repo. It
 
 - Follow the module boundaries below. Don't invent new top-level structure without saying so.
 - **Easy Mode is the whole scope.** Anything from the Hard Mode roadmap goes in the roadmap, not into a change here. See [Scope discipline](#scope-discipline).
+- There is a **second, independent axis** under discussion: lifecycle management (running several labs, stopping them, reaping expired ones). It is *not* Hard Mode — it is a different job, not harder architecture. `docs/lab-management.md` specs it. **Nothing in that document is built**, and it is not licence to add lifecycle features here until it is agreed.
 - **Verify claims about Azure against current docs rather than trusting this file.** API versions, image SKUs, preview/GA status and cmdlet surfaces all move. Where this document states a fact about Azure, treat it as "true when written," and re-check it before a deployment anyone is depending on.
 - The leak-prevention rules are non-negotiable: no real subscription/tenant/object IDs, no real email addresses, no hardcoded secrets in tracked files. Placeholders only. See `CONTRIBUTING.md`.
 - Headings here are named, not numbered, and code comments deliberately do not cross-reference them. A comment should explain itself where it sits; a pointer into a spec file only rots.
