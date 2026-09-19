@@ -506,13 +506,43 @@ values there. The local file is gitignored; the tracked one must keep placeholde
 
 function Test-LabPreflight {
     <#
-        Three checks, in the order they are likely to ruin a deployment:
-        unregistered providers fail the first module, quota fails at session
-        hosts, and inherited policy fails somewhere in the middle with an error
-        message that rarely names the policy responsible.
+        Checks, ordered by how far into a deployment the corresponding failure
+        would otherwise surface. The point of every one of them is to fail in
+        phase 1 rather than phase 8.
+
+        Leftover placeholders and a taken storage account name are the two that
+        motivated this: both are trivially detectable up front, and both
+        otherwise fail only after several minutes of real resources being
+        created -- a storage account name collision kills phase 3, and a
+        placeholder budget email kills phase 8, by which point session hosts are
+        already provisioned and billing.
     #>
     [CmdletBinding()]
     param()
+
+    # --- Leftover placeholders ---
+    # The tracked parameter file ships placeholders by design, so a user who
+    # copied it and only half-filled the copy is the expected case, not an edge
+    # one. Catch every <ANGLE_BRACKET> value at once rather than one per failed run.
+    $placeholders = @()
+    foreach ($name in ($script:LabParameters.Keys | Sort-Object)) {
+        $value = $script:LabParameters[$name]
+        # -cmatch, not -match: PowerShell's -match is case-insensitive, so [A-Z_]
+        # would also match a lowercase value that happens to be angle-wrapped.
+        # Placeholders are UPPERCASE by convention, and that is the whole signal.
+        if ($value -is [string] -and $value -cmatch '^<[A-Z_]+>$') { $placeholders += "$name = $value" }
+    }
+    if ($placeholders) {
+        throw @"
+The parameter file still holds placeholder value(s):
+
+    $($placeholders -join "`n    ")
+
+Fill these in in bicep/parameters/avdlab.local.bicepparam (gitignored). The
+tracked avdlab.bicepparam must keep its placeholders.
+"@
+    }
+    Write-Log -Step 'preflight' -Status Success -Message 'No placeholder values left in the parameter file'
 
     # --- Resource providers ---
     $required = @('Microsoft.DesktopVirtualization', 'Microsoft.Compute', 'Microsoft.Network', 'Microsoft.Storage', 'Microsoft.OperationalInsights', 'Microsoft.Insights')
@@ -568,6 +598,62 @@ script reports and stops by design; it does not change your subscription.
     }
     catch {
         Write-Log -Step 'preflight' -Status Warning -Message "Could not read vCPU quota: $($_.Exception.Message)"
+    }
+
+    # --- Storage account name availability ---
+    # Storage account names are globally unique across all of Azure, so the
+    # shipped default is certainly taken. Without this, the collision surfaces in
+    # phase 3 -- after the network is already built -- with an ARM error that
+    # names the constraint but not the fix.
+    $storageAccountName = $script:LabParameters['storageAccountName']
+    try {
+        $subscriptionId = (Get-AzContext).Subscription.Id
+        $response = Invoke-AzRestMethod -Method POST `
+            -Path "/subscriptions/$subscriptionId/providers/Microsoft.Storage/checkNameAvailability?api-version=2023-05-01" `
+            -Payload (@{ name = $storageAccountName; type = 'Microsoft.Storage/storageAccounts' } | ConvertTo-Json -Compress)
+
+        if ($response.StatusCode -ge 400) { throw "HTTP $($response.StatusCode)" }
+        $availability = $response.Content | ConvertFrom-Json
+
+        if ($availability.nameAvailable) {
+            Write-Log -Step 'preflight' -Status Success -Message "Storage account name '$storageAccountName' is available"
+        }
+        elseif ($availability.reason -eq 'AlreadyExists') {
+            # An account you already own is a re-run, which is fine and expected.
+            # One owned by somebody else is fatal, and we cannot tell which from
+            # here -- so check whether it is in this resource group.
+            $existing = Get-AzResource -ResourceGroupName $ResourceGroupName -Name $storageAccountName `
+                -ResourceType 'Microsoft.Storage/storageAccounts' -ErrorAction SilentlyContinue
+            if ($existing) {
+                Write-Log -Step 'preflight' -Status Info -Message "Storage account '$storageAccountName' already exists in this resource group; this run will converge it"
+            }
+            else {
+                throw @"
+Storage account name '$storageAccountName' is already taken.
+
+Storage account names are globally unique across all of Azure, and this one is
+not yours. Pick a different storageAccountName in
+bicep/parameters/avdlab.local.bicepparam -- 3-24 characters, lowercase letters
+and digits only.
+"@
+            }
+        }
+        else {
+            throw @"
+Storage account name '$storageAccountName' is not usable: $($availability.message)
+
+Names must be 3-24 characters, lowercase letters and digits only. Set
+storageAccountName in bicep/parameters/avdlab.local.bicepparam.
+"@
+        }
+    }
+    catch [System.Management.Automation.RuntimeException] {
+        throw
+    }
+    catch {
+        # A failed *check* is not a failed deployment. Warn and carry on rather
+        # than blocking a run over an unavailable availability API.
+        Write-Log -Step 'preflight' -Status Warning -Message "Could not check storage account name availability: $($_.Exception.Message)"
     }
 
     # --- Inherited Azure Policy ---
