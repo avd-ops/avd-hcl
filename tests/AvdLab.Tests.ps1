@@ -3,22 +3,31 @@
 <#
     AVD Lab Kit — Pester suite.
 
-    Two concerns live here, deliberately:
-      1. Leak prevention (Section 14) — tracked files must never carry real
-         subscription/tenant/group IDs. These tests run today and every day.
-      2. Bicep parameter + naming-convention validation (Section 7/9) — these
-         come online as modules land in Week 1; until then they self-skip
-         rather than fail a scaffold-only repo.
+    Three concerns live here:
+
+      1. Leak prevention. Tracked files must never carry a real subscription,
+         tenant or object ID, a real email address, or a hardcoded password.
+         These run on every commit and are the reason the tracked parameter files
+         can stay placeholder-only forever.
+
+      2. Parameter validation. avdlab.bicepparam uses `using none`, so Bicep does
+         not type-check its values against any module. These tests are what was
+         traded for that. If they are ever deleted, a typo'd parameter name
+         becomes a silently ignored value rather than a build failure.
+
+      3. Repository shape. Every deliverable exists, every script parses, and the
+         naming convention holds.
 #>
 
 BeforeAll {
     $script:RepoRoot = Split-Path -Parent $PSScriptRoot
     $script:ModuleDir = Join-Path $RepoRoot 'bicep/modules'
     $script:ParamDir = Join-Path $RepoRoot 'bicep/parameters'
+    $script:ScriptDir = Join-Path $RepoRoot 'scripts'
 }
 
 Describe 'Repository structure' {
-    It "has the '<_>' directory from the Section 4 layout" -ForEach @(
+    It "has the '<_>' directory" -ForEach @(
         'bicep/modules'
         'bicep/parameters'
         'scripts'
@@ -28,6 +37,25 @@ Describe 'Repository structure' {
         Join-Path $RepoRoot $_ | Should -Exist
     }
 
+    It "ships the '<_>' Bicep module" -ForEach @(
+        'network', 'storage', 'hostpool', 'appgroup'
+        'workspace', 'sessionhosts', 'monitoring', 'scalingplan'
+    ) {
+        Join-Path $ModuleDir "$_.bicep" | Should -Exist
+    }
+
+    It "ships the '<_>' script" -ForEach @(
+        'Deploy-AvdLab.ps1'
+        'Remove-AvdLab.ps1'
+        'Initialize-AvdLabPrerequisites.ps1'
+        'Set-AvdLabFSLogixAuth.ps1'
+        'Add-AvdLabAssignments.ps1'
+        'Test-AvdLabDeployment.ps1'
+        'New-AvdLabReport.ps1'
+    ) {
+        Join-Path $ScriptDir $_ | Should -Exist
+    }
+
     It 'ships an MIT LICENSE' {
         $license = Join-Path $RepoRoot 'LICENSE'
         $license | Should -Exist
@@ -35,7 +63,7 @@ Describe 'Repository structure' {
     }
 }
 
-Describe 'Leak prevention (Section 14)' {
+Describe 'Leak prevention' {
 
     Context '.gitignore' {
         BeforeAll {
@@ -54,8 +82,8 @@ Describe 'Leak prevention (Section 14)' {
 
     Context 'Tracked files carry placeholders, never real values' {
         BeforeAll {
-            # Only inspect files git actually tracks. An untracked local
-            # override sitting in the working tree is fine and expected.
+            # Only inspect files git actually tracks. An untracked local override
+            # sitting in the working tree is fine and expected.
             Push-Location $RepoRoot
             $tracked = @(git ls-files -- '*.bicepparam' '*.config.json' '*.bicep')
             Pop-Location
@@ -93,44 +121,88 @@ Describe 'Leak prevention (Section 14)' {
                 Where-Object { $_.Content -match "(?i)(adminPassword|localAdminPassword)\s*[:=]\s*'[^']+'" } |
                 ForEach-Object { $_.Path }
 
-            $offenders | Should -BeNullOrEmpty -Because 'Section 5 requires a random runtime-generated password'
+            $offenders | Should -BeNullOrEmpty -Because 'the orchestrator generates a random password at runtime and discards it'
+        }
+    }
+
+    Context 'Scripts' {
+        BeforeAll {
+            Push-Location $RepoRoot
+            $script:TrackedScripts = @(git ls-files -- '*.ps1') | Where-Object { $_ } | ForEach-Object {
+                [pscustomobject]@{ Path = $_; Content = Get-Content (Join-Path $RepoRoot $_) -Raw }
+            }
+            Pop-Location
+        }
+
+        It 'contains no bare GUID outside the documented well-known service principal IDs' {
+            # Well-known Microsoft appIds are identical in every tenant, so they
+            # are not secrets and must be allowed. Anything else is suspect.
+            $wellKnown = @(
+                '62e90394-69f5-4237-9190-012177145e10'  # Global Administrator role template
+                '00000003-0000-0000-c000-000000000000'  # Microsoft Graph
+                '9cdead84-a844-4324-93f2-b2e6bb768d07'  # Azure Virtual Desktop
+                '00000000-0000-0000-0000-000000000000'  # all-zero placeholder
+            )
+            $guid = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+
+            $offenders = foreach ($file in $TrackedScripts) {
+                $found = [regex]::Matches($file.Content, $guid) | ForEach-Object { $_.Value.ToLower() }
+                $unexpected = $found | Where-Object { $_ -notin $wellKnown }
+                if ($unexpected) { "$($file.Path): $($unexpected -join ', ')" }
+            }
+
+            $offenders | Should -BeNullOrEmpty -Because 'a real directory object ID must never be tracked'
+        }
+
+        It "parses as valid PowerShell: '<_.Path>'" -ForEach @(
+            (Get-ChildItem (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts') -Filter '*.ps1' -File |
+                ForEach-Object { @{ Path = $_.Name; Full = $_.FullName } })
+        ) {
+            $parseErrors = $null
+            $tokens = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.Full, [ref]$tokens, [ref]$parseErrors) | Out-Null
+            $parseErrors | Should -BeNullOrEmpty
         }
     }
 }
 
 Describe 'Parameter file (avdlab.bicepparam)' {
     <#
-        avdlab.bicepparam uses `using none`, so Bicep does not type-check its values
-        against any module (a single param file bound to one template cannot carry
-        eight modules' parameters -- BCP259). These tests are what we traded that
-        compile-time safety for. If they are ever deleted, a typo'd parameter name
-        becomes a silently ignored value.
+        These tests are the compile-time safety `using none` gives up. They are
+        not optional extras.
     #>
 
     BeforeAll {
         $script:ParamFile = Join-Path $ParamDir 'avdlab.bicepparam'
 
-        # Parameters the orchestrator supplies at runtime, so they must NOT appear
-        # in the tracked file: module outputs, generated secrets, time-derived values.
+        # Supplied by the orchestrator at deployment time, so they must NOT appear
+        # in the tracked file: module outputs, generated secrets, time-derived
+        # values, and anything computed from a switch.
         $script:RuntimeInjected = @(
             'hostPoolId'            # output of hostpool.bicep
+            'subnetId'              # output of network.bicep
             'applicationGroupIds'   # output of appgroup.bicep
+            'sessionHostNames'      # output of sessionhosts.bicep
+            'profileShareUncPath'   # output of storage.bicep
             'registrationToken'     # output of hostpool.bicep (secret)
+            'adminPassword'         # generated at runtime, never stored
             'tokenExpirationTime'   # dateTimeAdd(utcNow(), ...) default
-            'adminPassword'         # generated at runtime, never stored (Section 5)
+            'budgetStartDate'       # utcNow('yyyy-MM-01') default
+            'enableFsLogix'         # set from the orchestrator's -SkipFSLogix switch
         )
 
-        # Names legitimately shared, with the same meaning, across every module.
-        # Any OTHER name declared by more than one module is ambiguous and must not
-        # be assigned in a flat param file -- it would splat into all of them.
-        $script:SharedParams = @('location', 'tags')
-
-        # Params for modules not yet written. Listed explicitly so this test reports
-        # a real gap rather than quietly tolerating anything unrecognized.
-        $script:FutureModuleParams = @(
-            'sessionHostCount', 'vmSize', 'imagePublisher', 'imageOffer', 'imageSku'
-            'logAnalyticsWorkspaceName', 'logAnalyticsRetentionDays'
-            'budgetAmount', 'budgetAlertEmail', 'costGuardrailMode'
+        # Names declared by more than one module that genuinely mean the SAME
+        # thing everywhere they appear, and are therefore safe to assign once in
+        # a flat file. Every other repeated name is ambiguous by definition.
+        #
+        # Adding a name here is a claim that you checked. `friendlyName` is the
+        # standing counter-example: four modules, four different meanings.
+        $script:SharedParams = @(
+            'location'          # every module
+            'tags'              # every module
+            'hostPoolName'      # hostpool, sessionhosts, monitoring
+            'appGroupName'      # appgroup, monitoring
+            'workspaceName'     # workspace, monitoring
         )
 
         # name -> list of modules declaring it, and which are required (no default).
@@ -154,14 +226,24 @@ Describe 'Parameter file (avdlab.bicepparam)' {
 
         # Assigned parameter names, taken from the compiled output rather than
         # regexed out of the source -- if it doesn't compile, nothing else matters.
-        $compiled = az bicep build-params --file $ParamFile --stdout 2>$null | ConvertFrom-Json
+        #
+        # Either Bicep CLI will do. CI installs the az wrapper; a contributor is
+        # just as likely to have the standalone binary, and a test suite that only
+        # runs on the CI runner is a test suite nobody runs before pushing.
+        $compiled = if (Get-Command bicep -ErrorAction SilentlyContinue) {
+            bicep build-params $ParamFile --stdout 2>$null | ConvertFrom-Json
+        }
+        elseif (Get-Command az -ErrorAction SilentlyContinue) {
+            az bicep build-params --file $ParamFile --stdout 2>$null | ConvertFrom-Json
+        }
+        else { $null }
         $script:Assigned = if ($compiled) {
             ($compiled.parametersJson | ConvertFrom-Json).parameters.PSObject.Properties.Name
         }
         else { @() }
     }
 
-    It 'compiles with az bicep build-params' {
+    It 'compiles with the Bicep CLI' {
         $ParamFile | Should -Exist
         $Assigned.Count | Should -BeGreaterThan 0 -Because 'a param file that does not compile emits nothing'
     }
@@ -171,16 +253,13 @@ Describe 'Parameter file (avdlab.bicepparam)' {
     }
 
     It 'assigns no parameter that is unknown to every module' {
-        # Anything here is either a typo or a param for a module nobody has written.
-        $unknown = $Assigned |
-            Where-Object { -not $Declared.ContainsKey($_) } |
-            Where-Object { $_ -notin $FutureModuleParams }
-
-        $unknown | Should -BeNullOrEmpty -Because 'with `using none` a typo is silently ignored, not rejected'
+        # Anything here is a typo. With `using none` a typo is silently ignored
+        # rather than rejected, which is precisely why this test exists.
+        $unknown = $Assigned | Where-Object { -not $Declared.ContainsKey($_) }
+        $unknown | Should -BeNullOrEmpty
     }
 
     It 'assigns no ambiguous parameter shared across modules with different meanings' {
-        # e.g. friendlyName means something different in hostpool/appgroup/workspace.
         $ambiguous = $Assigned | Where-Object {
             $Declared.ContainsKey($_) -and
             $Declared[$_].Count -gt 1 -and
@@ -210,8 +289,6 @@ Describe 'Parameter file (avdlab.bicepparam)' {
 
 Describe 'Bicep modules' {
     BeforeDiscovery {
-        # Discovery-time lookup so -ForEach can expand over real files. Empty
-        # during the Week 1 scaffold; the tests below simply do not materialize.
         $moduleDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'bicep/modules'
         $script:Modules = if (Test-Path $moduleDir) {
             Get-ChildItem $moduleDir -Filter '*.bicep' -File
@@ -219,20 +296,56 @@ Describe 'Bicep modules' {
         else { @() }
     }
 
-    It 'has at least one module once Week 1 module work begins' -Skip:($Modules.Count -eq 0) {
-        $Modules.Count | Should -BeGreaterThan 0
-    }
-
     Context 'Module <_.Name>' -ForEach $Modules {
-        It 'declares a targetScope or relies on the resourceGroup default' {
-            $content = Get-Content $_.FullName -Raw
-            $content | Should -Not -BeNullOrEmpty
+        It 'is not empty' {
+            Get-Content $_.FullName -Raw | Should -Not -BeNullOrEmpty
         }
 
         It 'declares no secure parameter with a default value' {
             # A @secure() param with a default is a hardcoded secret waiting to happen.
             $content = Get-Content $_.FullName -Raw
             $content | Should -Not -Match '(?ms)@secure\(\)\s*\r?\nparam\s+\w+\s+string\s*='
+        }
+
+        It 'describes every parameter it declares' {
+            # An undocumented parameter is one the next person has to guess at.
+            #
+            # Walking backwards from the `param` line looks simpler and is wrong:
+            # decorators stack, so @description is routinely separated from its
+            # parameter by a multi-line @allowed([...]) block. Track the most
+            # recent description instead, and reset it at every declaration.
+            $inMultiline = $false
+            $sawDescription = $false
+            $undocumented = @()
+
+            foreach ($line in (Get-Content $_.FullName)) {
+                $trimmed = $line.Trim()
+
+                # A ''' fence opens or closes a multi-line description body. Prose
+                # inside it must not be mistaken for a declaration.
+                $fences = ([regex]::Matches($trimmed, "'''")).Count
+                if ($fences % 2 -eq 1) { $inMultiline = -not $inMultiline }
+                if ($inMultiline) {
+                    if ($trimmed -match "^@(sys\.)?description\(") { $sawDescription = $true }
+                    continue
+                }
+
+                if ($trimmed -match "^@(sys\.)?description\(") { $sawDescription = $true; continue }
+
+                if ($trimmed -match '^param\s+(\w+)') {
+                    if (-not $sawDescription) { $undocumented += $Matches[1] }
+                    $sawDescription = $false
+                    continue
+                }
+
+                # Any other declaration ends the current decorator block, so a
+                # description above it cannot carry down to a later parameter.
+                if ($trimmed -match '^(resource|output|var|func|module|type|targetScope|using)\s') {
+                    $sawDescription = $false
+                }
+            }
+
+            $undocumented | Should -BeNullOrEmpty
         }
     }
 }
