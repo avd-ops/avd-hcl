@@ -6,7 +6,7 @@
 <#
 .SYNOPSIS
     Takes a greenfield subscription + Entra tenant from zero to "ready for Lab Kit."
-    Run once, up front, by choice. (CLAUDE.md Section 19.)
+    Run once, up front, by choice.
 
 .DESCRIPTION
     "Setup once, verify every time." This script is the setup half. It remediates
@@ -15,8 +15,8 @@
     inspects and reports, because the remedies are procurement decisions, support
     tickets, or tenant-wide security changes that no lab tool should make for you.
 
-    Distinct from Connect-AvdLabContext (Section 3/4), which runs at the start of
-    every deployment and only ever checks and fails fast. This runs once.
+    Distinct from the pre-flight checks inside Deploy-AvdLab.ps1, which run at the
+    start of every deployment and only ever check and fail fast. This runs once.
 
     THE HEADLINE CHECK IS SECURITY DEFAULTS.
     Entra Kerberos requires the FSLogix storage account app to be excluded from
@@ -26,7 +26,7 @@
     likely reason a greenfield run fails is a tenant setting that predates the
     first line of Bicep, and resolving it is a deliberate, tenant-wide decision:
     disable Security Defaults, replace it with Conditional Access (Entra ID P1).
-    See Section 6/12/19 and Set-AvdLabFSLogixAuth.ps1, which refuses to proceed.
+    See docs/bootstrap.md, and Set-AvdLabFSLogixAuth.ps1, which refuses to proceed.
 
 .NOTES
     REST over cmdlets, deliberately.
@@ -35,8 +35,8 @@
     Az.Compute, Microsoft.Graph.Identity.SignIns, and
     Microsoft.Graph.Identity.DirectoryManagement -- three more modules a user must
     install before a *prerequisite checker* will run, which is a poor joke. The
-    REST endpoints are stable, and this keeps the module surface to the three in
-    Section 3's tooling list.
+    REST endpoints are stable, and this keeps the module surface down to the three
+    modules the README asks you to install.
 
 .PARAMETER SubscriptionId
     Target subscription. Passed explicitly so a stale Az context cannot quietly
@@ -417,7 +417,7 @@ function Test-Permission {
         else {
             Add-Result -Check 'Global Administrator' -Status ActionNeeded `
                 -Detail "not held (roles: $(($roles | ForEach-Object { $_.displayName }) -join ', '))" `
-                -Action 'Required for the Entra Kerberos app-registration steps (Section 6). Not a Contributor-level operation.'
+                -Action 'Required for the Entra Kerberos app-registration steps. Not a Contributor-level operation.'
         }
     }
     catch {

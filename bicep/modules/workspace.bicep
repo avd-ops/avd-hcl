@@ -4,8 +4,8 @@
   The workspace is the top of the feed: a user subscribes to a workspace and sees
   whatever the application groups it references publish. The reference is stored
   here, on the workspace, which is why this module deploys AFTER appgroup.bicep
-  and takes its ID as input. See the header of appgroup.bicep for why that
-  reverses Section 4's original ordering.
+  and takes its ID as input. See the header of appgroup.bicep for why that order
+  is the one that works in a single pass.
 
   applicationGroupReferences is a REPLACE-IN-FULL array. Deploying this module
   with a shorter list silently unpublishes whatever is missing -- the app groups

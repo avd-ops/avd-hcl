@@ -50,10 +50,12 @@
     Access policies that exclude this app -- so this script reports the condition
     and stops rather than silently weakening a tenant's security posture.
 
-    CLOUD-ONLY IDENTITY SUPPORT IS IN PREVIEW.
-    Entra Kerberos for cloud-only identities (no on-prem AD DS) is documented as
-    Preview as of 2026-07-09. Easy Mode depends on it. Worth knowing before this
-    is demoed live or forked by an audience.
+    CLOUD-ONLY IDENTITY SUPPORT IS GENERALLY AVAILABLE.
+    Entra-only identities for Azure Files SMB reached GA on 2026-05-19. Easy Mode
+    depends on it entirely, so it is worth stating that this is no longer a
+    preview dependency -- but note what did NOT change at GA: admin consent, the
+    kdc_enable_cloud_group_sids manifest tag, and the MFA exclusion are all still
+    required, and all three still fail silently when missing.
 
 .PARAMETER StorageAccountName
     Name of the FSLogix storage account, as output by storage.bicep.
@@ -63,8 +65,8 @@
     session fails fast rather than configuring the wrong tenant.
 
 .PARAMETER StorageSuffix
-    File endpoint suffix. Azure Commercial only in v1 (Section 1); GovCloud is a
-    parallel variant, not a flag.
+    File endpoint suffix. Azure Commercial only; Azure Government is a parallel
+    variant rather than a flag on this build.
 
 .PARAMETER ApplyConditionalAccessExclusion
     Opt-in. Patches every MFA-requiring Conditional Access policy that targets all
@@ -114,9 +116,9 @@ $script:RequiredScopes = 'openid profile User.Read'
 $script:CloudGroupSidsTag = 'kdc_enable_cloud_group_sids'
 
 # Local step logger. The orchestrator (Deploy-AvdLab.ps1) will supply the shared
-# structured Write-Log described in Section 5; until it exists, this keeps the
-# script runnable standalone, which is the whole point of prototyping it in
-# isolation.
+# transcript by capturing this script's output. Keeping a local logger here is
+# what lets the script stay runnable on its own, which is how it should be
+# tested before it is ever run as part of a deployment.
 function Write-Step {
     [CmdletBinding()]
     param(

@@ -3,7 +3,7 @@
 
   An application group is what users are actually assigned to. A Desktop app group
   publishes the whole session desktop; a RailApplications group publishes
-  individual apps. Easy Mode takes Desktop (Section 2).
+  individual apps. Easy Mode takes Desktop.
 
   DEPLOYMENT ORDER, AND WHY IT IS NOT WHAT THE SPEC ORIGINALLY SAID.
   The workspace <-> app group link lives on the WORKSPACE as
@@ -13,14 +13,14 @@
 
       hostpool.bicep -> appgroup.bicep -> workspace.bicep
 
-  Section 4's original order (workspace, then app group) would need workspace.bicep
+  The intuitive order (workspace, then app group) would need workspace.bicep
   deployed twice -- once empty, once with the reference. Same end state, one extra
   deployment, and a window where the workspace exists publishing nothing.
 
   Note there is NO role assignment here. Assigning users/groups to this app group
   is a Graph/RBAC operation and lives in Add-AvdLabAssignments.ps1, together with
   the Storage File Data SMB Share Contributor grant the FSLogix share needs
-  (Section 6). Keeping "who may access what" in one place beats splitting it
+  for cloud-only identities. Keeping "who may access what" in one place beats splitting it
   across a Bicep module and a script.
 */
 

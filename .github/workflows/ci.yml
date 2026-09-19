@@ -38,7 +38,7 @@ jobs:
           shopt -s nullglob
           modules=(bicep/modules/*.bicep)
           if [ ${#modules[@]} -eq 0 ]; then
-            echo "No Bicep modules yet — skipping. (Week 1 scaffold.)"
+            echo "No Bicep modules found — skipping."
             exit 0
           fi
           fail=0
@@ -113,8 +113,8 @@ jobs:
           if-no-files-found: ignore
 
   # -------------------------------------------------------------------------
-  # Secret scanning (Section 14). This is the CI backstop; the local
-  # pre-commit hook in .githooks/ is the primary control.
+  # Secret scanning. This is the CI backstop; the local pre-commit hook in
+  # .githooks/ is the primary control. See CONTRIBUTING.md.
   #
   # Deliberately the gitleaks CLI, not gitleaks/gitleaks-action@v2. The action
   # scans only the commit range of the triggering event, which broke twice:
@@ -130,10 +130,10 @@ jobs:
   #           Without it: "Resource not accessible by integration".
   #
   # Scanning full history every run removes both failure modes, needs no
-  # GITHUB_TOKEN and no added permissions, and is what Section 14 actually
-  # asks for -- a real backstop for a commit where the local hook was skipped.
-  # A history scan is also the Jul 27 pre-public task, made continuous rather
-  # than a one-shot. The repo is small; the whole scan is under a second.
+  # GITHUB_TOKEN and no added permissions, and is a real backstop for a commit
+  # where the local hook was skipped. Scanning history continuously also beats a
+  # one-shot audit: history is what a reader of a public repo actually sees. The
+  # repo is small; the whole scan is under a second.
   # -------------------------------------------------------------------------
   secret-scan:
     name: gitleaks
@@ -160,9 +160,10 @@ jobs:
         run: gitleaks git --redact --verbose .
 
 # ---------------------------------------------------------------------------
-# Stretch goal (Section 15) — do NOT enable before 7/29. A `what-if` validation
-# job against a real subscription using GitHub OIDC federated credentials
-# (no stored secrets). Left commented out intentionally.
+# Optional: a `what-if` validation job against a real subscription using GitHub
+# OIDC federated credentials (no stored secrets). Left commented out because it
+# needs repository variables pointing at a live subscription, which a fork will
+# not have.
 #
 #  whatif:
 #    name: what-if (live subscription)

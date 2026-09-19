@@ -62,7 +62,7 @@ param tags object = {}
 // makes "there is no way in" legible to anyone reading the template.
 //
 // We do NOT lock down outbound to an allowlist of AVD service tags here. Doing
-// so is a legitimate hardening step, but it's a Hard Mode concern (Section 13):
+// so is a legitimate hardening step, but it belongs to the harder tier:
 // the required tag set shifts, and a stale allowlist fails in a way that looks
 // exactly like a broken deployment on stage.
 // ---------------------------------------------------------------------------
