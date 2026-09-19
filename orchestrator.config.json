@@ -1,7 +1,7 @@
 {
   "$comment": [
     "PowerShell-layer settings only — anything Bicep needs belongs in bicep/parameters/avdlab.bicepparam instead.",
-    "PLACEHOLDERS ONLY in this tracked file (CLAUDE.md Section 14).",
+    "PLACEHOLDERS ONLY in this tracked file. See CONTRIBUTING.md.",
     "Copy to orchestrator.local.config.json (gitignored) and put real values there.",
     "The orchestrator prefers orchestrator.local.config.json when present."
   ],

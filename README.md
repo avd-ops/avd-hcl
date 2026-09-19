@@ -1,29 +1,37 @@
 # AVD Lab Kit
 
-> **Status: in progress — nothing here deploys end-to-end yet.**
-> The Bicep modules for networking, storage, and the AVD control plane compile and are ready to deploy individually. The orchestrator that strings them together does not exist. This README describes **what actually works today**, not what the finished tool will do. See [Current state](#current-state) for the exact line.
-
 A fully scripted, repeatable Azure Virtual Desktop lab — "AVD as code." Spin it up, demonstrate the pattern, tear it down cleanly in one command. Bicep modules handle everything that's a clean ARM resource; a thin PowerShell orchestrator wraps them for the things that aren't (Microsoft Graph calls, Microsoft Entra Kerberos enablement, and step-by-step narration you can talk over during a live demo).
 
 This is deliberately the **Easy Mode** build: Entra ID-joined session hosts, no domain controller, no on-prem dependency, one resource group. It's meant to be understood in one sitting and forked without standing up AD DS first. See [Easy Mode / Hard Mode](#easy-mode--hard-mode) for what that leaves out, and why saying so out loud is the point.
 
-## Current state
+## Status
 
-| Component | Status |
+All eight Bicep modules and all seven scripts are written. Every module compiles under `bicep build` with **warnings treated as errors**, every script parses, and the parameter-file guards and leak-prevention tests pass.
+
+**It has not yet been deployed end to end against a live Azure subscription.** Treat it as reviewed code, not as tested infrastructure, until you've run it once yourself. `-Validate` (below) is the cheap way to find out how it behaves in *your* subscription before it creates anything.
+
+## What gets deployed
+
+| Module | What it creates |
 | --- | --- |
-| `bicep/modules/network.bicep` — VNet, subnet, NSG, NAT gateway | Compiles; not yet deployed to Azure |
-| `bicep/modules/storage.bicep` — Azure Files + Entra Kerberos toggle | Compiles; not yet deployed to Azure |
-| `bicep/modules/hostpool.bicep` — pooled host pool + registration token | Compiles; not yet deployed to Azure |
-| `bicep/modules/appgroup.bicep` — desktop application group | Compiles; not yet deployed to Azure |
-| `bicep/modules/workspace.bicep` — workspace | Compiles; not yet deployed to Azure |
-| `bicep/parameters/avdlab.bicepparam` | Placeholders only |
-| `scripts/Initialize-AvdLabPrerequisites.ps1` | Runnable |
-| `scripts/Set-AvdLabFSLogixAuth.ps1` | Runnable; never yet run against a real tenant |
-| `sessionhosts.bicep`, `monitoring.bicep`, `scalingplan.bicep` | Not written |
-| `Deploy-AvdLab.ps1`, `Remove-AvdLab.ps1`, `Add-AvdLabAssignments.ps1`, `Test-AvdLabDeployment.ps1`, `New-AvdLabReport.ps1` | Not written |
-| CI: Bicep build, Pester, gitleaks history scan | Green |
+| `network.bicep` | VNet, subnet, NSG, NAT gateway — no public IP on any session host |
+| `storage.bicep` | Azure Files share for FSLogix, with Microsoft Entra Kerberos enabled |
+| `hostpool.bicep` | Pooled host pool + a freshly minted registration token |
+| `appgroup.bicep` | Desktop application group |
+| `workspace.bicep` | Workspace, publishing the application group |
+| `sessionhosts.bicep` | N Entra-joined VMs: AVD agent, FSLogix and Kerberos client config |
+| `monitoring.bicep` | Log Analytics, AVD diagnostics, data collection rule + agent, budget alert |
+| `scalingplan.bicep` | Weekday ramp-up / peak / ramp-down / off-peak autoscale |
 
-Everything above is verified against compilers and mocked API responses. **Nothing has been deployed to a real Azure subscription yet.** Treat the modules as reviewed code, not as tested infrastructure.
+| Script | What it does |
+| --- | --- |
+| `Initialize-AvdLabPrerequisites.ps1` | One-off subscription/tenant readiness check; registers resource providers |
+| `Deploy-AvdLab.ps1` | Orchestrates all eight modules, narrating as it goes |
+| `Set-AvdLabFSLogixAuth.ps1` | The Entra app-registration work that ARM cannot express |
+| `Add-AvdLabAssignments.ps1` | The three role assignments the lab needs to actually work |
+| `Test-AvdLabDeployment.ps1` | Smoke test — checks the failures that are otherwise silent |
+| `New-AvdLabReport.ps1` | As-built document on success, evidence bundle on failure |
+| `Remove-AvdLab.ps1` | Teardown, plus the orphan check a resource group delete doesn't cover |
 
 ## Prerequisites
 
@@ -34,12 +42,15 @@ Install-Module Az.Accounts, Az.Resources, Az.Storage -Scope CurrentUser
 Install-Module Microsoft.Graph.Authentication, Microsoft.Graph.Applications, `
                Microsoft.Graph.Identity.SignIns, Microsoft.Graph.Users, `
                Microsoft.Graph.Groups -Scope CurrentUser
-az bicep install    # or the VS Code Bicep extension
+az bicep install    # or the standalone Bicep CLI, or the VS Code Bicep extension
 ```
+
+The Bicep CLI is a hard requirement, not just an authoring convenience: `avdlab.bicepparam` uses `using none` and must be compiled before the orchestrator can read it.
 
 `Microsoft.Graph.Applications` and `Microsoft.Graph.Identity.SignIns` are required by `Set-AvdLabFSLogixAuth.ps1`. `Initialize-AvdLabPrerequisites.ps1` deliberately needs neither — it queries the REST endpoints directly, so the one script guaranteed to run on an unprepared machine has the smallest possible dependency list.
 
-**Azure:** Contributor + User Access Administrator (or Owner) on the target subscription.
+**Azure:** Contributor + User Access Administrator (or Owner) on the target subscription. User Access Administrator is not optional — the lab creates role assignments, and granting a role requires the authority to grant roles.
+
 **Entra ID:** Global Administrator, for the Entra Kerberos app-registration steps. This is not a Contributor-level operation.
 
 ## Check your subscription and tenant
@@ -68,42 +79,69 @@ FSLogix profiles live on an Azure Files share reached via Microsoft Entra Kerber
 
 Security Defaults is **enabled by default on every tenant created since October 2019.** If yours has it on, you must consciously disable it and replace it with Conditional Access before the FSLogix half of this lab can work. That's a tenant-wide security decision with real consequences — which is exactly why `Set-AvdLabFSLogixAuth.ps1` detects the condition and refuses to proceed rather than quietly weakening your tenant to make a deployment succeed.
 
-Everything else in the lab — host pool, app group, workspace, autoscale — works fine without it. Only FSLogix profile containers are blocked.
+Everything else in the lab — host pool, app group, workspace, autoscale — works fine without it. Only FSLogix profile containers are blocked, and `-SkipFSLogix` (below) lets you deploy the rest while you sort it out.
 
-## Deploying a module
+## Configure
 
-There is **no orchestrator yet**. Until `Deploy-AvdLab.ps1` exists, deploy modules one at a time. The parameter file uses `using none`, so compile it and pass each module the parameters it declares:
+Copy both tracked files to their gitignored local overrides and put your real values there. Never edit the tracked copies:
 
 ```powershell
-Connect-AzAccount -Subscription <subscription-guid> -Tenant <tenant-guid>
-New-AzResourceGroup -Name rg-avdlab-weuc -Location eastus2
-
-# Dry run first. what-if is free and shows you exactly what would change.
-New-AzResourceGroupDeployment -ResourceGroupName rg-avdlab-weuc `
-    -TemplateFile ./bicep/modules/network.bicep `
-    -vnetName vnet-avdlab -vnetCidr 10.20.0.0/24 -subnetCidr 10.20.0.0/26 `
-    -WhatIf
+Copy-Item bicep/parameters/avdlab.bicepparam bicep/parameters/avdlab.local.bicepparam
+Copy-Item orchestrator.config.json orchestrator.local.config.json
 ```
 
-`bicep/parameters/avdlab.bicepparam` holds placeholder values. Two need real ones before anything deploys:
+`Deploy-AvdLab.ps1` prefers the local files automatically whenever they exist. Four values need real ones:
 
-- **`storageAccountName`** — `stavdlabfslogix` is globally unique across all of Azure and is almost certainly taken. Pick your own.
-- **`budgetAlertEmail`** — currently `<YOUR_EMAIL>`.
+| Where | Value | Why |
+| --- | --- | --- |
+| `avdlab.local.bicepparam` | `storageAccountName` | Globally unique across all of Azure. `stavdlabfslogix` is certainly taken. |
+| `avdlab.local.bicepparam` | `budgetAlertEmail` | Where the cost alert goes. |
+| `orchestrator.local.config.json` | `azure.subscriptionId` / `azure.tenantId` | The orchestrator refuses to run on the placeholders. |
+| `orchestrator.local.config.json` | `assignment.demoGroupObjectId` | The Entra security group your lab users are in. |
 
-`.gitignore` already excludes `avdlab.local.bicepparam` and `orchestrator.local.config.json`, and `CONTRIBUTING.md` documents the policy. **Nothing reads those override files yet** — the orchestrator that would prefer them over the tracked defaults isn't written. For now, pass values on the command line as above, and never edit the tracked file with real values.
+## Deploying
+
+Dry run first. `-Validate` runs every module through what-if and changes nothing:
+
+```powershell
+./scripts/Deploy-AvdLab.ps1 -ResourceGroupName rg-avdlab -Validate
+```
+
+Then for real:
+
+```powershell
+./scripts/Deploy-AvdLab.ps1 -ResourceGroupName rg-avdlab
+```
+
+It runs twelve phases in order, narrating each one, and writes a structured transcript to `./reports/<timestamp>/`. On success it produces an as-built document; on failure it produces an evidence bundle instead — the transcript, the failing deployment's operation detail, and the resource group's state at the point it broke.
+
+`-SkipFSLogix` deploys everything except profile containers. That's the documented fallback: if Entra Kerberos won't cooperate, the host pool, load balancing, autoscale and app group all still work, and profiles simply become local and non-roaming. Losing profiles is much better than losing the whole demo.
+
+Once it finishes, users subscribe at **https://client.wvd.microsoft.com/arm/webclient**. Role assignments take a few minutes to propagate; someone who can't see the desktop immediately is usually waiting on that rather than broken.
 
 ## Tearing down
 
-Everything lives in one resource group, so teardown is one command. `Remove-AvdLab.ps1` will wrap this with orphan checks; today it's:
+```powershell
+./scripts/Remove-AvdLab.ps1 -ResourceGroupName rg-avdlab
+```
+
+Everything lives in one resource group, so the delete is a single call. The script then checks what a resource group delete *doesn't* take with it — principally the storage account's Entra application registration, which is a directory object rather than an Azure resource and survives. Add `-RemoveEntraApplication` to clean that up too.
+
+## Troubleshooting
 
 ```powershell
-Remove-AzResourceGroup -Name rg-avdlab-weuc -Force
+./scripts/Test-AvdLabDeployment.ps1 -ResourceGroupName rg-avdlab -HostPoolName hp-avdlab-pooled `
+    -StorageAccountName <your-storage-account> -ExpectedHostCount 3
+
+./scripts/New-AvdLabReport.ps1 -Mode Evidence -ResourceGroupName rg-avdlab
 ```
+
+Both are read-only and safe against a live environment. The smoke test exists specifically for the failures that report success everywhere else — a host pool with zero registered hosts, a workspace publishing nothing, a scaling plan with no authority to start a VM, a share nobody has RBAC on.
 
 ## Verifying your changes
 
 ```powershell
-az bicep build --file bicep/modules/<module>.bicep --stdout > $null
+bicep build bicep/modules/<module>.bicep --stdout > $null   # or: az bicep build --file ...
 Invoke-Pester ./tests
 ```
 
@@ -111,7 +149,7 @@ CI runs both on every push and pull request, plus a full-history `gitleaks` scan
 
 ## Easy Mode / Hard Mode
 
-**Easy Mode (v1 — this repo)** is the simplest deployable AVD lab that's still a legitimate, real-world-shaped pattern:
+**Easy Mode (this repo)** is the simplest deployable AVD lab that's still a legitimate, real-world-shaped pattern:
 
 - Entra ID-joined session hosts — no AD DS, no Entra Domain Services
 - Pooled host pool, Windows 11 Enterprise multi-session, 2–3 hosts with an autoscale scaling plan
@@ -121,11 +159,13 @@ CI runs both on every push and pull request, plus a full-history `gitleaks` scan
 - **Zero public IPs and zero inbound RDP rules.** That's not a shortcut taken for demo simplicity — AVD's reverse-connect transport means session hosts only ever make *outbound* HTTPS connections. Nothing ever connects inbound to a session host.
 - **A NAT gateway, because outbound is no longer free.** Default outbound access retired on 2026-03-31. VNets created with current API versions get private subnets and no implicit egress, so `network.bicep` sets `defaultOutboundAccess: false` explicitly and supplies a NAT gateway. Left unhandled, the failure is invisible: every deployment succeeds and the host pool sits empty forever, because the AVD agent could never reach the service to register.
 
-Two caveats worth stating plainly. Entra Kerberos support for **cloud-only identities is in Preview** as of July 2026, and Easy Mode depends on it entirely. And the whole build targets **Azure Commercial only** — Azure Government has different endpoints, image availability, and a compliance overlay, so it's a parallel variant rather than a config flag.
+One caveat worth stating plainly: the whole build targets **Azure Commercial only**. Azure Government has different endpoints, image availability, and a compliance overlay, so it's a parallel variant rather than a config flag.
+
+Entra Kerberos for cloud-only identities went **generally available on 2026-05-19**, so Easy Mode no longer rests on a preview feature. What GA did *not* change is the fiddly part: admin consent, the `kdc_enable_cloud_group_sids` manifest tag, and the MFA exclusion are all still required, and all three still fail silently when missing. That's what `Set-AvdLabFSLogixAuth.ps1` is for.
 
 It runs happily in a subscription that already has other workloads. Isolation comes from a dedicated resource group, so it never touches anything outside it. An empty subscription is a convenience, never a requirement.
 
-**Hard Mode (roadmap, not built here)** is what it looks like at an actual customer, layered onto the same module foundation: hybrid AD DS join, VNet peering to an existing hub, Private Link with custom DNS, custom golden images, and Intune management (v2). Then Bastion, App Attach, GPU hosts, multi-region DR (v3). Then Azure Local (v4). Azure Government / GCC High is a parallel variant rather than a layer (v5).
+**Hard Mode (roadmap, not built here)** is what it looks like at an actual customer, layered onto the same module foundation: hybrid AD DS join, VNet peering to an existing hub, Private Link with custom DNS, custom golden images, and Intune management. Then Bastion, App Attach, GPU hosts, multi-region DR. Then Azure Local. Azure Government / GCC High is a parallel variant rather than a layer.
 
 Easy Mode's brownfield story is *non-interference*. Hard Mode's is *integration* — peering into a corporate VNet, joining an existing forest, using existing DNS. That's the real distinction between the tiers, not "simple vs. complex."
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# AVD Lab Kit — pre-commit secret scan (CLAUDE.md Section 14).
+# AVD Lab Kit — pre-commit secret scan. See CONTRIBUTING.md.
 #
 # This is the *primary* leak-prevention control: it stops a real subscription
 # ID, tenant ID, or key from entering a commit at all. The CI job and GitHub's

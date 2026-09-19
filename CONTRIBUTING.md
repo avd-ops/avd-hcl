@@ -2,7 +2,7 @@
 
 ## Secrets & leak prevention
 
-This repo is private today and goes public at the `v1.0.0` release. Treat every commit as permanent and world-readable from now anyway: flipping visibility exposes the entire history at once, so a real value committed today is a leak on release day, not a mistake you get to quietly delete beforehand.
+Treat every commit as permanent and world-readable. Git history is not a draft: a real value committed once stays reachable in the history of every clone and fork, and deleting the line in a later commit does nothing about that.
 
 **Tracked files hold placeholders only.** `bicep/parameters/avdlab.bicepparam` and `orchestrator.config.json` carry `<YOUR_SUBSCRIPTION_ID>`-style tokens and nothing else. Your real subscription ID, tenant ID, demo group object ID, and budget alert email go in a local override that git never sees:
 
@@ -54,4 +54,6 @@ az bicep build --file bicep/modules/<module>.bicep --stdout > /dev/null
 Invoke-Pester ./tests
 ```
 
-CI runs `az bicep build` on every module, the Pester suite, and a `gitleaks` history scan. Check that CI is green before merging — as a solo-committer repo on the Free tier, that self-gate stands in for enforced branch protection.
+CI runs `az bicep build` on every module, the Pester suite, and a `gitleaks` history scan. Check that CI is green before merging.
+
+Note the Bicep job treats **warnings as failures**. `az bicep build` exits 0 on a warning, and the warnings that matter are not stylistic — `BCP245` means a resource will not deploy at all. A template that compiles cleanly and silently does nothing is the exact failure class this project exists to make visible.

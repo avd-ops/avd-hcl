@@ -14,9 +14,9 @@
 
   2. `registrationTokenOperation: 'Update'` mints a NEW token on every deployment.
      That is deliberate. Tokens expire (max 30 days, and we default to hours), and
-     a re-run that reuses an expired token produces the failure mode Section 8
-     warns about: everything deploys successfully and the pool sits empty because
-     no host could register. Idempotent in the sense that matters -- converging on
+     a re-run that reuses an expired token produces the worst failure this lab
+     has: everything deploys successfully and the pool sits empty because no host
+     could register. Idempotent in the sense that matters -- converging on
      "a valid token exists" -- rather than "the same bytes come back."
 */
 
@@ -80,7 +80,8 @@ the demo tenant.
 The property is superseded by `enablerdsaadauth:i:1`, which gives true single
 sign-on. That is the nicer experience, but it requires granting admin consent to
 the Windows Cloud Login service principal at tenant level first -- another Entra
-consent step on top of the Section 6 ones, and another thing to go wrong on stage.
+consent step on top of the Entra Kerberos ones, and another thing to go wrong on
+stage.
 Easy Mode takes the boring option and leaves SSO as a deliberate choice.
 ''')
 param customRdpProperty string = 'targetisaadjoined:i:1;'

@@ -63,7 +63,7 @@ Now let the script tell you where you stand.
     -OutputPath ./reports/readiness.json
 ```
 
-> **Write the report to `./reports/`, not the repo root.** It records your real subscription and tenant IDs. `/reports/` is gitignored; the root is not, and the Pester leak tests only scan `.bicepparam`, `.config.json`, and `.bicep` files — a stray `readiness.json` at the root would sail into a commit uncaught.
+> **Write the report to `./reports/`, not the repo root.** It records your real subscription and tenant IDs. `/reports/` is gitignored; the root is not, and the Pester leak tests only scan `.bicepparam`, `.config.json`, `.bicep` and `.ps1` files — a stray `readiness.json` at the root would sail into a commit uncaught. (`.gitignore` also matches the common report filenames wherever they land, as a second line of defence.)
 
 It registers the four resource providers (idempotent) and reports the rest. Work through whatever it flags using the sections below. Re-run it as often as you like.
 
@@ -112,14 +112,14 @@ The app to exclude is named `[Storage Account] <your-storage-account-name>.file.
 >
 > Conditional Access requires **Entra ID P1** or better. The **Entra ID P2 trial lasts 30 days.**
 >
-> If you start the trial today to unblock this lab, it expires roughly a month from now. If your demo is further out than that — and for the September WEUC session it is — you will be standing on stage with an expired license.
+> If you start the trial to unblock this lab, it expires roughly a month later. If the date you actually need the lab is further out than that, you will be standing in front of an audience with an expired license.
 >
 > What happens on expiry is worse than it sounds. Conditional Access policies are **not** disabled or deleted when the license lapses. They keep enforcing. You can view and delete them, but **you cannot edit them.** So an expired trial leaves you with an MFA-for-all-apps policy that still blocks Kerberos and that you can no longer add an exclusion to. The fix at that point is to delete the policy outright.
 >
 > Three ways out, in order of preference:
 > - **Take Path A instead.** A disposable tenant needs no Conditional Access, so it needs no license.
 > - **Buy Entra ID P1**, or use a tenant that already has it via M365 E3/E5/F1/F3 or Business Premium.
-> - **Start the trial deliberately late**, within 30 days of the date you actually need it — and rehearse before you start it, using Path A in a separate tenant.
+> - **Start the trial deliberately late**, within 30 days of the date you actually need it — and rehearse beforehand using Path A in a separate tenant.
 
 ---
 
@@ -155,7 +155,7 @@ Session hosts don't publish themselves to anyone. Create:
 1. A **security group** — e.g. `AVD Lab Users`. Its object ID goes in `orchestrator.local.config.json` as `demoGroupObjectId`.
 2. At least one **member user** to sign in with during the demo.
 
-`Add-AvdLabAssignments.ps1` (not yet written) will grant that group the AVD `Desktop Virtualization User` role on the app group, plus `Storage File Data SMB Share Contributor` on the storage account. For cloud-only identities there are no NTFS ACLs anywhere in the picture — share access is governed **entirely** by Azure RBAC.
+`Add-AvdLabAssignments.ps1` grants that group the AVD `Desktop Virtualization User` role on the app group, plus `Storage File Data SMB Share Contributor` on the storage account. For cloud-only identities there are no NTFS ACLs anywhere in the picture — share access is governed **entirely** by Azure RBAC.
 
 Assign the user's Windows license here too, if you have one.
 
@@ -201,7 +201,7 @@ Copy-Item orchestrator.config.json orchestrator.local.config.json
 
 Set a globally unique `storageAccountName` (the placeholder `stavdlabfslogix` is certainly taken), a real `budgetAlertEmail`, and your `demoGroupObjectId`.
 
-> **Note:** nothing reads those override files yet — `Deploy-AvdLab.ps1` isn't written. Until then, pass values to `New-AzResourceGroupDeployment` directly. See the README.
+`Deploy-AvdLab.ps1` prefers both local files automatically when they exist, so nothing else needs editing once they are in place.
 
 ---
 

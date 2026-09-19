@@ -88,7 +88,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
 
     // Lab-scoped: the session host subnet reaches this account over the Azure
     // backbone. Locking egress down to a VNet rule or Private Link is a Hard
-    // Mode item (Section 13, v2), not a v1 omission.
+    // Mode item, not an oversight here.
     networkAcls: {
       bypass: 'AzureServices'
       defaultAction: 'Allow'
