@@ -200,9 +200,7 @@ Describe 'Parameter file (avdlab.bicepparam)' {
         $script:SharedParams = @(
             'location'          # every module
             'tags'              # every module
-            'hostPoolName'      # hostpool, sessionhosts, monitoring
-            'appGroupName'      # appgroup, monitoring
-            'workspaceName'     # workspace, monitoring
+            'labName'           # every module -- the identity every name derives from
         )
 
         # name -> list of modules declaring it, and which are required (no default).
@@ -347,5 +345,105 @@ Describe 'Bicep modules' {
 
             $undocumented | Should -BeNullOrEmpty
         }
+    }
+}
+
+Describe 'Lab naming' {
+    <#
+        Names are derived from labName inside each module rather than passed in,
+        which is what lets several labs coexist and lets the management layer
+        address a lab by name alone. These tests defend the two ways that can
+        silently break: a name that stops deriving, and an orchestrator that
+        derives it differently from the module.
+    #>
+
+    BeforeAll {
+        $script:ModuleSource = @{}
+        Get-ChildItem $ModuleDir -Filter '*.bicep' -File | ForEach-Object {
+            $ModuleSource[$_.BaseName] = Get-Content $_.FullName -Raw
+        }
+        $script:OrchestratorSource = Get-Content (Join-Path $ScriptDir 'Deploy-AvdLab.ps1') -Raw
+        $script:ParamSource = Get-Content (Join-Path $ParamDir 'avdlab.bicepparam') -Raw
+    }
+
+    It 'constrains labName to 3-9 characters in every module that declares it' {
+        # 9 is not a style choice. See the computer-name test below.
+        $wrong = foreach ($name in $ModuleSource.Keys) {
+            $source = $ModuleSource[$name]
+            if ($source -notmatch '(?ms)@minLength\(3\)\s*\r?\n@maxLength\(9\)\s*\r?\nparam labName string') { $name }
+        }
+        $wrong | Should -BeNullOrEmpty -Because 'a longer lab name produces a computer name ARM rejects'
+    }
+
+    It 'assigns a valid labName in the tracked parameter file' {
+        $ParamSource | Should -Match "(?m)^param labName = '[a-z0-9]{3,9}'"
+    }
+
+    It 'keeps the session host computer name within the 15-character Windows limit' {
+        # The arithmetic that fixes labName at 9. If someone widens the lab name
+        # or the index, this is what tells them what it costs.
+        $maxLabName = 9
+        $maxIndexDigits = 2          # sessionHostCount allows up to 50
+        $computerName = 'vm-' + ('x' * $maxLabName) + '-' + ('9' * $maxIndexDigits)
+        $computerName.Length | Should -BeLessOrEqual 15
+    }
+
+    It 'keeps the derived storage account name within 24 characters' {
+        # 'st' + take(labName,9) + uniqueString (always 13) = 24 exactly.
+        (2 + 9 + 13) | Should -BeLessOrEqual 24
+        $ModuleSource['storage'] | Should -Match "take\(sanitisedLabName, 9\)"
+        $ModuleSource['storage'] | Should -Match "uniqueString\(resourceGroup\(\)\.id\)"
+    }
+
+    It 'derives <_.Resource> from labName in <_.Module>.bicep' -ForEach @(
+        @{ Module = 'network';     Resource = 'vnetName';                  Prefix = 'vnet-avdlab' }
+        @{ Module = 'hostpool';    Resource = 'hostPoolName';              Prefix = 'hp-avdlab' }
+        @{ Module = 'appgroup';    Resource = 'appGroupName';              Prefix = 'dag-avdlab' }
+        @{ Module = 'workspace';   Resource = 'workspaceName';             Prefix = 'ws-avdlab' }
+        @{ Module = 'monitoring';  Resource = 'logAnalyticsWorkspaceName'; Prefix = 'log-avdlab' }
+        @{ Module = 'scalingplan'; Resource = 'scalingPlanName';           Prefix = 'sp-avdlab' }
+    ) {
+        $ModuleSource[$_.Module] | Should -Match ([regex]::Escape("var $($_.Resource) = '$($_.Prefix)-`${labName}'"))
+    }
+
+    It 'has the orchestrator derive <_.Kind> names identically to the modules' -ForEach @(
+        @{ Kind = 'hostPool';     Module = 'hostpool';    Resource = 'hostPoolName' }
+        @{ Kind = 'appGroup';     Module = 'appgroup';    Resource = 'appGroupName' }
+        @{ Kind = 'workspace';    Module = 'workspace';   Resource = 'workspaceName' }
+        @{ Kind = 'logAnalytics'; Module = 'monitoring';  Resource = 'logAnalyticsWorkspaceName' }
+        @{ Kind = 'scalingPlan';  Module = 'scalingplan'; Resource = 'scalingPlanName' }
+        @{ Kind = 'vnet';         Module = 'network';     Resource = 'vnetName' }
+    ) {
+        # The orchestrator must know a lab's resource names before it has
+        # deployed anything, so it cannot read them from a module output. That
+        # duplication is deliberate -- and this is what stops it drifting. A
+        # divergence here would have the orchestrator look for resources under
+        # a name nothing created and report them missing.
+        $moduleMatch = [regex]::Match($ModuleSource[$_.Module], "var $($_.Resource) = '([a-z-]+)-\`${labName}'")
+        $moduleMatch.Success | Should -BeTrue -Because "$($_.Module).bicep should derive $($_.Resource)"
+
+        $orchestratorMatch = [regex]::Match($OrchestratorSource, "$($_.Kind)\s*=\s*'([a-z-]+)'")
+        $orchestratorMatch.Success | Should -BeTrue -Because "Deploy-AvdLab.ps1 should map $($_.Kind) to a prefix"
+
+        $orchestratorMatch.Groups[1].Value | Should -BeExactly $moduleMatch.Groups[1].Value
+    }
+
+    It 'tags every resource with its lab name' {
+        # What finds a resource that outlived its resource group.
+        $missing = foreach ($name in $ModuleSource.Keys) {
+            if ($ModuleSource[$name] -notmatch "union\(tags, \{ 'avdlab-name': labName \}\)") { $name }
+        }
+        $missing | Should -BeNullOrEmpty
+    }
+
+    It 'assigns no resource name in the parameter file' {
+        # Names are derived. Re-introducing one here would create a second
+        # source of truth that the management layer cannot reconcile.
+        $offenders = @('vnetName', 'nsgName', 'natGatewayName', 'publicIpName', 'storageAccountName',
+                       'hostPoolName', 'workspaceName', 'appGroupName',
+                       'logAnalyticsWorkspaceName', 'scalingPlanName', 'sessionHostPrefix') |
+            Where-Object { $ParamSource -match "(?m)^param $_ =" }
+
+        $offenders | Should -BeNullOrEmpty
     }
 }

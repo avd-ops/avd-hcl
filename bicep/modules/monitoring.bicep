@@ -26,10 +26,26 @@
 @description('Azure region.')
 param location string = resourceGroup().location
 
-@description('Name of the Log Analytics workspace.')
-@minLength(4)
-@maxLength(63)
-param logAnalyticsWorkspaceName string
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
+@minLength(3)
+@maxLength(9)
+param labName string = 'lab'
 
 @description('''
 Retention in days. 30 is the included-at-no-cost floor and is deliberately not
@@ -39,15 +55,6 @@ retention on a workspace nobody deletes is a slow leak.
 @minValue(30)
 @maxValue(730)
 param logAnalyticsRetentionDays int = 30
-
-@description('Name of the host pool to collect diagnostics from.')
-param hostPoolName string
-
-@description('Name of the desktop application group to collect diagnostics from.')
-param appGroupName string
-
-@description('Name of the AVD workspace to collect diagnostics from.')
-param workspaceName string
 
 @description('''
 Names of the session hosts to attach the Azure Monitor Agent and Data Collection
@@ -85,12 +92,33 @@ param budgetStartDate string = utcNow('yyyy-MM-01')
 param tags object = {}
 
 // ---------------------------------------------------------------------------
+// Derived names. The three AVD resources are referenced as `existing`, so these
+// must match exactly what the other modules built -- which is precisely why
+// they are derived from one lab name rather than passed in separately. A
+// mismatch here does not fail loudly: the diagnostic setting simply attaches to
+// nothing and the Insights workbook stays empty.
+// ---------------------------------------------------------------------------
+var logAnalyticsWorkspaceName = 'log-avdlab-${labName}'
+var hostPoolName = 'hp-avdlab-${labName}'
+var appGroupName = 'dag-avdlab-${labName}'
+var workspaceName = 'ws-avdlab-${labName}'
+var dataCollectionRuleName = 'dcr-avdlab-${labName}'
+var actionGroupName = 'ag-avdlab-${labName}'
+var budgetName = 'budget-avdlab-${labName}'
+
+// Action group short names are capped at 12 characters and this is what shows
+// up in the alert email subject. 'avd' (3) + labName (max 9) = 12 exactly.
+var actionGroupShortName = take('avd${labName}', 12)
+
+var labTags = union(tags, { 'avdlab-name': labName })
+
+// ---------------------------------------------------------------------------
 // Log Analytics workspace
 // ---------------------------------------------------------------------------
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: logAnalyticsWorkspaceName
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     sku: {
       name: 'PerGB2018'
@@ -193,9 +221,9 @@ resource avdWorkspaceDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-
 // without it and simply shows blank host-performance panels.
 // ---------------------------------------------------------------------------
 resource dataCollectionRule 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
-  name: 'dcr-avdlab-insights'
+  name: dataCollectionRuleName
   location: location
-  tags: tags
+  tags: labTags
   kind: 'Windows'
   properties: {
     description: 'Performance counters and event logs required by the AVD Insights workbook.'
@@ -293,7 +321,7 @@ resource azureMonitorAgent 'Microsoft.Compute/virtualMachines/extensions@2024-07
   parent: existingSessionHosts[i]
   name: 'AzureMonitorWindowsAgent'
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     publisher: 'Microsoft.Azure.Monitor'
     type: 'AzureMonitorWindowsAgent'
@@ -319,14 +347,14 @@ resource dcrAssociation 'Microsoft.Insights/dataCollectionRuleAssociations@2023-
 // Cost guardrail — action group + budget, scoped to this resource group
 // ---------------------------------------------------------------------------
 resource budgetActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
-  name: 'ag-avdlab-budget'
+  name: actionGroupName
   // Action groups are a global resource. 'global' is correct here and a region
   // name is rejected.
   location: 'global'
-  tags: tags
+  tags: labTags
   properties: {
     // Max 12 characters, and it is what shows up in the alert email subject.
-    groupShortName: 'avdlabcost'
+    groupShortName: actionGroupShortName
     enabled: true
     emailReceivers: [
       {
@@ -339,7 +367,7 @@ resource budgetActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
 }
 
 resource budget 'Microsoft.Consumption/budgets@2023-05-01' = {
-  name: 'budget-avdlab'
+  name: budgetName
   properties: {
     category: 'Cost'
     amount: budgetAmount

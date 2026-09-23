@@ -66,7 +66,13 @@ sp-avdlab-<labName>          scaling plan
 vm-<labName>-0..n            session hosts
 ```
 
-Lab names are constrained to **3–12 characters, lowercase letters and digits**. That is not arbitrary: the Windows computer name limit is 15 characters, and `vm-<labName>-<n>` must fit inside it.
+Lab names are constrained to **3–9 characters, lowercase letters and digits**. That is not arbitrary, and an earlier draft of this document got it wrong by saying 3–12: the Windows computer name limit is 15 characters and session hosts are named `vm-<labName>-<n>`, with `sessionHostCount` allowing a two-digit index.
+
+```
+'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+```
+
+A 12-character lab name yields an 18-character computer name, which ARM rejects — at the session host phase, after the network, storage and host pool are already built. Bicep can constrain a parameter's length but not its character set, so `Deploy-AvdLab.ps1` validates the character set itself in pre-flight.
 
 `labName` **defaults to `lab`**. That keeps the current single-lab workflow working unchanged: someone who forks this repo and runs `Deploy-AvdLab.ps1` without knowing management exists gets exactly what they get today, under a slightly different set of resource names. A mandatory lab name would break every existing fork on update to buy nothing.
 

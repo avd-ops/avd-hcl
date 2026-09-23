@@ -24,10 +24,26 @@
   integers; the split happens here so the editable surface stays human-shaped.
 */
 
-@description('Name of the scaling plan.')
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
 @minLength(3)
-@maxLength(64)
-param scalingPlanName string = 'sp-avdlab-weekday'
+@maxLength(9)
+param labName string = 'lab'
 
 @description('Azure region. Must match the host pool.')
 param location string = resourceGroup().location
@@ -36,7 +52,7 @@ param location string = resourceGroup().location
 param hostPoolId string
 
 @description('Name shown in the portal.')
-param friendlyName string = 'AVD Lab Kit — weekday autoscale'
+param friendlyName string = ''
 
 @description('''
 IANA/Windows time zone the schedule is evaluated in. This is the single most
@@ -85,6 +101,10 @@ param scalingPlanEnabled bool = true
 @description('Tags applied to every resource in this module.')
 param tags object = {}
 
+var scalingPlanName = 'sp-avdlab-${labName}'
+var labTags = union(tags, { 'avdlab-name': labName })
+var effectiveFriendlyName = empty(friendlyName) ? 'AVD Lab Kit weekday autoscale — ${labName}' : friendlyName
+
 // 'HH:mm' -> { hour: int, minute: int }. Bicep has no time type, so this is the
 // conversion ARM needs, done once rather than four times inline.
 func toScheduleTime(value string) object => {
@@ -95,9 +115,9 @@ func toScheduleTime(value string) object => {
 resource scalingPlan 'Microsoft.DesktopVirtualization/scalingPlans@2025-10-10' = {
   name: scalingPlanName
   location: location
-  tags: tags
+  tags: labTags
   properties: {
-    friendlyName: friendlyName
+    friendlyName: effectiveFriendlyName
     description: 'Weekday ramp-up/peak/ramp-down/off-peak autoscale, deployed by AVD Lab Kit.'
     timeZone: timeZone
 

@@ -31,9 +31,26 @@
 @maxValue(50)
 param sessionHostCount int = 3
 
-@description('Name prefix for session hosts. Keep short: the Windows computer name is derived from it and has a 15-character limit.')
-@maxLength(12)
-param sessionHostPrefix string = 'vm-avdlab'
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
+@minLength(3)
+@maxLength(9)
+param labName string = 'lab'
 
 @description('Index of the first session host. Lets a later run add hosts 3..4 without renaming 0..2.')
 @minValue(0)
@@ -47,9 +64,6 @@ param vmSize string = 'Standard_D4ads_v5'
 
 @description('Resource ID of the subnet to attach session host NICs to. Output of network.bicep.')
 param subnetId string
-
-@description('Name of the host pool to register with.')
-param hostPoolName string
 
 @description('Host pool registration token. Obtained from hostpool.bicep via listRegistrationTokens().')
 @secure()
@@ -111,6 +125,17 @@ param avdAgentPackageUrl string = 'https://wvdportalstorageblob.blob.${environme
 
 @description('Tags applied to every resource in this module.')
 param tags object = {}
+
+// ---------------------------------------------------------------------------
+// Derived names.
+//
+// sessionHostPrefix is where the 9-character lab name ceiling comes from:
+// 'vm-' + labName + '-' + a two-digit index must fit the 15-character Windows
+// computer name limit. See the labName description above.
+// ---------------------------------------------------------------------------
+var sessionHostPrefix = 'vm-${labName}'
+var hostPoolName = 'hp-avdlab-${labName}'
+var labTags = union(tags, { 'avdlab-name': labName })
 
 // ---------------------------------------------------------------------------
 // Client-side configuration script, run by the Custom Script Extension.
@@ -219,7 +244,7 @@ var configCommand = 'powershell -ExecutionPolicy Bypass -NoProfile -Command "[IO
 resource nics 'Microsoft.Network/networkInterfaces@2024-05-01' = [for i in range(0, sessionHostCount): {
   name: '${sessionHostPrefix}-${sessionHostIndexStart + i}-nic'
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     ipConfigurations: [
       {
@@ -242,7 +267,7 @@ resource nics 'Microsoft.Network/networkInterfaces@2024-05-01' = [for i in range
 resource sessionHosts 'Microsoft.Compute/virtualMachines@2024-07-01' = [for i in range(0, sessionHostCount): {
   name: '${sessionHostPrefix}-${sessionHostIndexStart + i}'
   location: location
-  tags: tags
+  tags: labTags
 
   // Required by the AADLoginForWindows extension: the machine needs its own
   // identity before it can be joined to a directory as itself.
@@ -329,7 +354,7 @@ resource entraJoin 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' = [
   parent: sessionHosts[i]
   name: 'AADLoginForWindows'
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     publisher: 'Microsoft.Azure.ActiveDirectory'
     type: 'AADLoginForWindows'
@@ -351,7 +376,7 @@ resource avdAgent 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' = [f
   parent: sessionHosts[i]
   name: 'Microsoft.PowerShell.DSC'
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     publisher: 'Microsoft.Powershell'
     type: 'DSC'
@@ -386,7 +411,7 @@ resource hostConfig 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' = 
   parent: sessionHosts[i]
   name: 'ConfigureAvdLabSessionHost'
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     publisher: 'Microsoft.Compute'
     type: 'CustomScriptExtension'

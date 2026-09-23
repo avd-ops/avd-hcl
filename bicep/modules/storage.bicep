@@ -37,10 +37,26 @@
 @description('Azure region for the storage account.')
 param location string = resourceGroup().location
 
-@description('Globally unique storage account name for FSLogix profiles. 3-24 chars, lowercase letters and digits only.')
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
 @minLength(3)
-@maxLength(24)
-param storageAccountName string
+@maxLength(9)
+param labName string = 'lab'
 
 @description('Name of the file share holding FSLogix profile containers.')
 param shareName string = 'profiles'
@@ -61,12 +77,36 @@ param storageSkuName string = 'Standard_LRS'
 @description('Tags applied to every resource in this module.')
 param tags object = {}
 
+var labTags = union(tags, { 'avdlab-name': labName })
+
 var isPremium = startsWith(storageSkuName, 'Premium')
+
+// ---------------------------------------------------------------------------
+// The storage account name is DERIVED, not supplied.
+//
+// Storage account names are globally unique across all of Azure, 3-24
+// characters, lowercase alphanumeric with no hyphens. A predictable name like
+// 'stavdlab${labName}' would collide with every other person who forked this
+// repo and picked the same lab name -- and they would find out at deployment
+// time, with an error that names the constraint but not the cause.
+//
+// uniqueString(resourceGroup().id) is deterministic: the same lab in the same
+// resource group always resolves to the same name, so a re-run converges
+// rather than orphaning an account and creating a second one. It is also
+// globally distinct from anyone else's.
+//
+// 'st' (2) + labName (max 9) + uniqueString (13) = 24 exactly, the limit.
+// The sanitise is belt and braces: labName is documented as lowercase
+// alphanumeric, but Bicep cannot enforce a character set on a parameter, and a
+// stray hyphen here would produce an invalid name rather than an obvious error.
+// ---------------------------------------------------------------------------
+var sanitisedLabName = toLower(replace(replace(labName, '-', ''), '_', ''))
+var storageAccountName = 'st${take(sanitisedLabName, 9)}${uniqueString(resourceGroup().id)}'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' = {
   name: storageAccountName
   location: location
-  tags: tags
+  tags: labTags
   sku: {
     name: storageSkuName
   }

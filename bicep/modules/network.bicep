@@ -24,26 +24,32 @@
 @description('Azure region for all networking resources.')
 param location string = resourceGroup().location
 
-@description('Name of the virtual network.')
-param vnetName string
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
+@minLength(3)
+@maxLength(9)
+param labName string = 'lab'
 
 @description('Address space for the virtual network, in CIDR notation.')
 param vnetCidr string
 
-@description('Name of the session host subnet.')
-param subnetName string = 'snet-avdlab-hosts'
-
 @description('Address range for the session host subnet. Must sit inside vnetCidr.')
 param subnetCidr string
-
-@description('Name of the network security group applied to the session host subnet.')
-param nsgName string = 'nsg-avdlab-hosts'
-
-@description('Name of the NAT gateway providing outbound internet access.')
-param natGatewayName string = 'natgw-avdlab'
-
-@description('Name of the public IP address attached to the NAT gateway. This is the only public IP in the lab, and it is outbound-only.')
-param publicIpName string = 'pip-avdlab-natgw'
 
 @description('Idle timeout in minutes for outbound NAT flows.')
 @minValue(4)
@@ -52,6 +58,25 @@ param natIdleTimeoutInMinutes int = 4
 
 @description('Tags applied to every resource in this module.')
 param tags object = {}
+
+// ---------------------------------------------------------------------------
+// Derived names. Resource names are not parameters: they are a function of the
+// lab name, which is what makes a lab addressable by name alone from the
+// management layer. Overridable names would mean two sources of truth about
+// what a lab's resources are called.
+// ---------------------------------------------------------------------------
+var vnetName = 'vnet-avdlab-${labName}'
+var nsgName = 'nsg-avdlab-${labName}'
+var natGatewayName = 'natgw-avdlab-${labName}'
+var publicIpName = 'pip-avdlab-${labName}'
+
+// The subnet is a child of the VNet, so its name is already scoped and cannot
+// collide with another lab's. It stays constant deliberately.
+var subnetName = 'snet-avdlab-hosts'
+
+// Identity tag, merged into whatever the caller passed. This is what finds
+// stray resources that outlived their resource group.
+var labTags = union(tags, { 'avdlab-name': labName })
 
 // ---------------------------------------------------------------------------
 // Network security group
@@ -69,7 +94,7 @@ param tags object = {}
 resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   name: nsgName
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     securityRules: [
       {
@@ -96,7 +121,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
 resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   name: publicIpName
   location: location
-  tags: tags
+  tags: labTags
   sku: {
     name: 'Standard' // NAT gateway requires a Standard SKU public IP.
     tier: 'Regional'
@@ -110,7 +135,7 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
 resource natGateway 'Microsoft.Network/natGateways@2024-05-01' = {
   name: natGatewayName
   location: location
-  tags: tags
+  tags: labTags
   sku: {
     name: 'Standard'
   }
@@ -137,7 +162,7 @@ resource natGateway 'Microsoft.Network/natGateways@2024-05-01' = {
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   name: vnetName
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     addressSpace: {
       addressPrefixes: [

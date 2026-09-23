@@ -202,6 +202,62 @@ function Invoke-Bicep {
     return ($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n"
 }
 
+function Get-LabResourceName {
+    <#
+        Derives a resource name from the lab name, mirroring exactly what the
+        Bicep modules do. This duplication is deliberate and load-bearing: the
+        orchestrator has to know what the host pool is called before it has
+        deployed anything, so it cannot simply read a module output.
+
+        The Pester suite asserts these strings match the modules' own
+        expressions, because a silent divergence here would be poisonous -- the
+        orchestrator would look for resources that exist under another name and
+        report them missing.
+
+        NOT here: the storage account. Its name is built with uniqueString(),
+        an ARM function with no PowerShell equivalent, so it is read from
+        storage.bicep's output instead.
+    #>
+    param(
+        [Parameter(Mandatory)][ValidateSet('hostPool', 'appGroup', 'workspace', 'logAnalytics', 'scalingPlan', 'vnet', 'resourceGroup')]
+        [string]$Kind,
+        [Parameter(Mandatory)][string]$LabName
+    )
+    $prefix = @{
+        hostPool      = 'hp-avdlab'
+        appGroup      = 'dag-avdlab'
+        workspace     = 'ws-avdlab'
+        logAnalytics  = 'log-avdlab'
+        scalingPlan   = 'sp-avdlab'
+        vnet          = 'vnet-avdlab'
+        resourceGroup = 'rg-avdlab'
+    }[$Kind]
+    return "$prefix-$LabName"
+}
+
+function Assert-LabName {
+    <#
+        Bicep can constrain a parameter's length but not its character set, so a
+        lab name with a capital letter or a hyphen compiles happily and then
+        produces an invalid storage account name several phases later. Validate
+        it here, once, before anything is created.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$LabName)
+
+    if ($LabName -cnotmatch '^[a-z0-9]{3,9}$') {
+        throw @"
+labName '$LabName' is not valid.
+
+It must be 3-9 characters, lowercase letters and digits only.
+
+The 9-character ceiling is the Windows computer name limit: session hosts are
+named vm-<labName>-<n>, and 'vm-' + 9 + '-' + a two-digit index is exactly 15.
+A longer name is rejected by ARM at the session host phase, long after the
+network and storage are built.
+"@
+    }
+}
+
 function Get-LabParameters {
     <#
         Compiles avdlab.bicepparam to a deploymentParameters document and flattens
@@ -544,6 +600,10 @@ tracked avdlab.bicepparam must keep its placeholders.
     }
     Write-Log -Step 'preflight' -Status Success -Message 'No placeholder values left in the parameter file'
 
+    # --- Lab name ---
+    Assert-LabName -LabName $script:LabName
+    Write-Log -Step 'preflight' -Status Success -Message "Lab name '$($script:LabName)' is valid; resources will be named *-avdlab-$($script:LabName)"
+
     # --- Resource providers ---
     $required = @('Microsoft.DesktopVirtualization', 'Microsoft.Compute', 'Microsoft.Network', 'Microsoft.Storage', 'Microsoft.OperationalInsights', 'Microsoft.Insights')
     $unregistered = @()
@@ -600,61 +660,10 @@ script reports and stops by design; it does not change your subscription.
         Write-Log -Step 'preflight' -Status Warning -Message "Could not read vCPU quota: $($_.Exception.Message)"
     }
 
-    # --- Storage account name availability ---
-    # Storage account names are globally unique across all of Azure, so the
-    # shipped default is certainly taken. Without this, the collision surfaces in
-    # phase 3 -- after the network is already built -- with an ARM error that
-    # names the constraint but not the fix.
-    $storageAccountName = $script:LabParameters['storageAccountName']
-    try {
-        $subscriptionId = (Get-AzContext).Subscription.Id
-        $response = Invoke-AzRestMethod -Method POST `
-            -Path "/subscriptions/$subscriptionId/providers/Microsoft.Storage/checkNameAvailability?api-version=2023-05-01" `
-            -Payload (@{ name = $storageAccountName; type = 'Microsoft.Storage/storageAccounts' } | ConvertTo-Json -Compress)
-
-        if ($response.StatusCode -ge 400) { throw "HTTP $($response.StatusCode)" }
-        $availability = $response.Content | ConvertFrom-Json
-
-        if ($availability.nameAvailable) {
-            Write-Log -Step 'preflight' -Status Success -Message "Storage account name '$storageAccountName' is available"
-        }
-        elseif ($availability.reason -eq 'AlreadyExists') {
-            # An account you already own is a re-run, which is fine and expected.
-            # One owned by somebody else is fatal, and we cannot tell which from
-            # here -- so check whether it is in this resource group.
-            $existing = Get-AzResource -ResourceGroupName $ResourceGroupName -Name $storageAccountName `
-                -ResourceType 'Microsoft.Storage/storageAccounts' -ErrorAction SilentlyContinue
-            if ($existing) {
-                Write-Log -Step 'preflight' -Status Info -Message "Storage account '$storageAccountName' already exists in this resource group; this run will converge it"
-            }
-            else {
-                throw @"
-Storage account name '$storageAccountName' is already taken.
-
-Storage account names are globally unique across all of Azure, and this one is
-not yours. Pick a different storageAccountName in
-bicep/parameters/avdlab.local.bicepparam -- 3-24 characters, lowercase letters
-and digits only.
-"@
-            }
-        }
-        else {
-            throw @"
-Storage account name '$storageAccountName' is not usable: $($availability.message)
-
-Names must be 3-24 characters, lowercase letters and digits only. Set
-storageAccountName in bicep/parameters/avdlab.local.bicepparam.
-"@
-        }
-    }
-    catch [System.Management.Automation.RuntimeException] {
-        throw
-    }
-    catch {
-        # A failed *check* is not a failed deployment. Warn and carry on rather
-        # than blocking a run over an unavailable availability API.
-        Write-Log -Step 'preflight' -Status Warning -Message "Could not check storage account name availability: $($_.Exception.Message)"
-    }
+    # NOTE: there is no storage account name check here any more. The name is
+    # derived from the lab name plus uniqueString(resourceGroup().id), so it
+    # cannot collide with another tenant's and cannot be mistyped. The check
+    # this replaced existed only because the name used to be hand-entered.
 
     # --- Inherited Azure Policy ---
     # The check most likely to matter in a subscription that already has other
@@ -703,6 +712,12 @@ $config = Get-Content $configFile -Raw | ConvertFrom-Json -AsHashtable
 $script:BicepCommand = Get-BicepCommand
 $script:LabParameters = Get-LabParameters -Path $parameterFile
 $script:DeployLocation = if ($Location) { $Location } elseif ($LabParameters.ContainsKey('location')) { $LabParameters['location'] } else { 'eastus2' }
+$script:LabName = if ($LabParameters.ContainsKey('labName')) { $LabParameters['labName'] } else { 'lab' }
+
+# Derived once, used everywhere below. These mirror the Bicep modules exactly.
+$script:HostPoolName = Get-LabResourceName -Kind hostPool -LabName $script:LabName
+$script:AppGroupName = Get-LabResourceName -Kind appGroup -LabName $script:LabName
+$script:WorkspaceName = Get-LabResourceName -Kind workspace -LabName $script:LabName
 
 if ($config.ContainsKey('narration')) {
     $script:NarrationEnabled = [bool]$config['narration']['enabled']
@@ -797,14 +812,14 @@ try {
         subnetId          = if ($Validate) { '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/validate/providers/Microsoft.Network/virtualNetworks/validate/subnets/validate' } else { $network['subnetId'] }
         adminPassword     = New-LabAdminPassword
         registrationToken = if ($Validate) { (ConvertTo-SecureString 'validate-only' -AsPlainText -Force) } else {
-            (ConvertTo-SecureString (Get-HostPoolRegistrationToken -DeploymentOutputs $hostPool -HostPoolName $LabParameters['hostPoolName']) -AsPlainText -Force)
+            (ConvertTo-SecureString (Get-HostPoolRegistrationToken -DeploymentOutputs $hostPool -HostPoolName $script:HostPoolName) -AsPlainText -Force)
         }
         enableFsLogix     = (-not $SkipFSLogix)
         profileShareUncPath = if ($Validate -or $SkipFSLogix) { '' } else { $storage['profileShareUncPath'] }
     }
 
     $hostCount = $LabParameters['sessionHostCount']
-    Write-Log -Step 'sessionhosts' -Status Info -Message "Registering $hostCount session host(s) to $($LabParameters['hostPoolName'])"
+    Write-Log -Step 'sessionhosts' -Status Info -Message "Registering $hostCount session host(s) to $($script:HostPoolName)"
     $sessionHosts = Invoke-LabDeployment -Module 'sessionhosts' -Description "Deploying $hostCount Entra-joined session host(s)" -Runtime $sessionHostRuntime
 
     # ---- 8. Monitoring ----
@@ -838,8 +853,12 @@ try {
             -Description 'Granting the demo group desktop access, share access, and the AVD service principal power-management rights' `
             -Arguments @{
                 ResourceGroupName  = $ResourceGroupName
-                AppGroupName       = $LabParameters['appGroupName']
-                StorageAccountName = $LabParameters['storageAccountName']
+                AppGroupName       = $script:AppGroupName
+                # From the deployment output, not derived: the storage account
+                # name is built with uniqueString(), which has no PowerShell
+                # equivalent. This is the only name the orchestrator cannot
+                # work out for itself.
+                StorageAccountName = $storage['storageAccountName']
                 DemoGroupObjectId  = $config['assignment']['demoGroupObjectId']
             }
     }
@@ -857,8 +876,8 @@ try {
             -Description 'Verifying the deployed environment' `
             -Arguments @{
                 ResourceGroupName  = $ResourceGroupName
-                HostPoolName       = $LabParameters['hostPoolName']
-                StorageAccountName = $LabParameters['storageAccountName']
+                HostPoolName       = $script:HostPoolName
+                StorageAccountName = $storage['storageAccountName']
                 ExpectedHostCount  = $LabParameters['sessionHostCount']
             }
     }
@@ -923,15 +942,16 @@ if ($exitCode -eq 0) {
         Write-Host "DEPLOYMENT COMPLETE in $([int]$elapsed.TotalMinutes)m $($elapsed.Seconds)s." -ForegroundColor Green
         Write-Host ''
         Write-Host "  Resource group   $ResourceGroupName" -ForegroundColor Gray
-        Write-Host "  Host pool        $($LabParameters['hostPoolName'])" -ForegroundColor Gray
-        Write-Host "  Workspace        $($LabParameters['workspaceName'])" -ForegroundColor Gray
-        Write-Host "  Application grp  $($LabParameters['appGroupName'])" -ForegroundColor Gray
+        Write-Host "  Lab name         $($script:LabName)" -ForegroundColor Gray
+        Write-Host "  Host pool        $($script:HostPoolName)" -ForegroundColor Gray
+        Write-Host "  Workspace        $($script:WorkspaceName)" -ForegroundColor Gray
+        Write-Host "  Application grp  $($script:AppGroupName)" -ForegroundColor Gray
         Write-Host "  Session hosts    $($LabParameters['sessionHostCount'])" -ForegroundColor Gray
         if (-not $SkipFSLogix -and $storage -and $storage.ContainsKey('profileShareUncPath')) {
             Write-Host "  FSLogix share    $($storage['profileShareUncPath'])" -ForegroundColor Gray
         }
-        elseif (-not $SkipFSLogix) {
-            Write-Host "  FSLogix share    $($LabParameters['storageAccountName']) / $($LabParameters['shareName'])" -ForegroundColor Gray
+        elseif (-not $SkipFSLogix -and $storage -and $storage.ContainsKey('storageAccountName')) {
+            Write-Host "  FSLogix share    $($storage['storageAccountName']) / $($LabParameters['shareName'])" -ForegroundColor Gray
         }
         else {
             Write-Host '  FSLogix          disabled (-SkipFSLogix); profiles are local' -ForegroundColor Yellow

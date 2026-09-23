@@ -199,7 +199,7 @@ Copy-Item bicep/parameters/avdlab.bicepparam bicep/parameters/avdlab.local.bicep
 Copy-Item orchestrator.config.json orchestrator.local.config.json
 ```
 
-Set a globally unique `storageAccountName` (the placeholder `stavdlabfslogix` is certainly taken), a real `budgetAlertEmail`, and your `demoGroupObjectId`.
+Set a real `budgetAlertEmail` and your `demoGroupObjectId`. You do not pick a storage account name — it is derived from the lab name plus `uniqueString(resourceGroup().id)`, so it is globally unique without being guessable and a re-run converges on the same account.
 
 `Deploy-AvdLab.ps1` prefers both local files automatically when they exist, so nothing else needs editing once they are in place.
 

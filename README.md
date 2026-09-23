@@ -90,14 +90,28 @@ Copy-Item bicep/parameters/avdlab.bicepparam bicep/parameters/avdlab.local.bicep
 Copy-Item orchestrator.config.json orchestrator.local.config.json
 ```
 
-`Deploy-AvdLab.ps1` prefers the local files automatically whenever they exist. Four values need real ones:
+`Deploy-AvdLab.ps1` prefers the local files automatically whenever they exist. Three values need real ones:
 
 | Where | Value | Why |
 | --- | --- | --- |
-| `avdlab.local.bicepparam` | `storageAccountName` | Globally unique across all of Azure. `stavdlabfslogix` is certainly taken. |
 | `avdlab.local.bicepparam` | `budgetAlertEmail` | Where the cost alert goes. |
 | `orchestrator.local.config.json` | `azure.subscriptionId` / `azure.tenantId` | The orchestrator refuses to run on the placeholders. |
 | `orchestrator.local.config.json` | `assignment.demoGroupObjectId` | The Entra security group your lab users are in. |
+
+**You no longer pick a storage account name.** It is derived from the lab name plus `uniqueString(resourceGroup().id)` — globally unique without being guessable, and deterministic, so a re-run converges on the same account instead of orphaning one.
+
+### Resource naming
+
+Every resource name derives from a single `labName` (default `lab`), following `<resourceType>-avdlab-<labName>`:
+
+| | |
+| --- | --- |
+| Host pool | `hp-avdlab-lab` |
+| Workspace | `ws-avdlab-lab` |
+| Application group | `dag-avdlab-lab` |
+| Session hosts | `vm-lab-0`, `vm-lab-1`, … |
+
+Lab names are 3–9 characters, lowercase letters and digits. The ceiling is the 15-character Windows computer name limit: `'vm-' + labName + '-' + a two-digit index`. Changing `labName` deploys a *separate* lab rather than renaming this one, which is what lets several coexist in one subscription.
 
 ## Deploying
 
@@ -130,8 +144,8 @@ Everything lives in one resource group, so the delete is a single call. The scri
 ## Troubleshooting
 
 ```powershell
-./scripts/Test-AvdLabDeployment.ps1 -ResourceGroupName rg-avdlab -HostPoolName hp-avdlab-pooled `
-    -StorageAccountName <your-storage-account> -ExpectedHostCount 3
+./scripts/Test-AvdLabDeployment.ps1 -ResourceGroupName rg-avdlab -HostPoolName hp-avdlab-lab `
+    -StorageAccountName <derived-name-from-the-as-built-report> -ExpectedHostCount 3
 
 ./scripts/New-AvdLabReport.ps1 -Mode Evidence -ResourceGroupName rg-avdlab
 ```

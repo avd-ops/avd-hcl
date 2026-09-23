@@ -24,10 +24,26 @@
   across a Bicep module and a script.
 */
 
-@description('Name of the desktop application group.')
+@description('''
+Short name identifying this lab. Every resource name in every module derives
+from it, which is what lets several labs coexist in one subscription and what
+lets the management commands find a lab knowing nothing but its name.
+
+3-9 characters, lowercase letters and digits.
+
+The 9-character ceiling is arithmetic, not taste. Windows computer names are
+limited to 15 characters, session hosts are named vm-<labName>-<n>, and
+sessionHostCount allows a two-digit index:
+
+    'vm-' (3) + labName (9) + '-' (1) + '49' (2) = 15
+
+A longer lab name produces a computer name ARM rejects, and it rejects it at
+the session host phase -- after the network, storage and host pool are already
+built.
+''')
 @minLength(3)
-@maxLength(64)
-param appGroupName string
+@maxLength(9)
+param labName string = 'lab'
 
 @description('Azure region. Must match the host pool.')
 param location string = resourceGroup().location
@@ -35,8 +51,8 @@ param location string = resourceGroup().location
 @description('Resource ID of the host pool this group publishes from. Output of hostpool.bicep.')
 param hostPoolId string
 
-@description('Name shown to users in the client.')
-param friendlyName string = 'AVD Lab Kit Desktop'
+@description('Name shown to users in the client. Carries the lab name so two labs are distinguishable in one feed.')
+param friendlyName string = ''
 
 @description('Description of the application group.')
 param appGroupDescription string = 'Full desktop published by AVD Lab Kit (Easy Mode).'
@@ -55,14 +71,18 @@ param applicationGroupType string = 'Desktop'
 @description('Tags applied to every resource in this module.')
 param tags object = {}
 
+var appGroupName = 'dag-avdlab-${labName}'
+var labTags = union(tags, { 'avdlab-name': labName })
+var effectiveFriendlyName = empty(friendlyName) ? 'AVD Lab Kit Desktop — ${labName}' : friendlyName
+
 resource appGroup 'Microsoft.DesktopVirtualization/applicationGroups@2025-10-10' = {
   name: appGroupName
   location: location
-  tags: tags
+  tags: labTags
   properties: {
     hostPoolArmPath: hostPoolId
     applicationGroupType: applicationGroupType
-    friendlyName: friendlyName
+    friendlyName: effectiveFriendlyName
     description: appGroupDescription
   }
 }

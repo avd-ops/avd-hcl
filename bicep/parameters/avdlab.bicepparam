@@ -31,12 +31,25 @@
   four different things across hostpool, appgroup, workspace and scalingplan.
   Assigning it once here would splat the same string into all four.
 
-  So: only genuinely lab-wide values (location, tags), names that mean the same
-  thing everywhere they appear (hostPoolName, appGroupName, workspaceName), or
-  unambiguous ones (vnetCidr, vmSize) live here. Anything whose name repeats with
-  a DIFFERENT meaning -- friendlyName above all -- is deliberately omitted and
+  So: only genuinely lab-wide values (location, tags, labName) or unambiguous
+  ones (vnetCidr, vmSize) live here. Anything whose name repeats with a
+  DIFFERENT meaning -- friendlyName above all -- is deliberately omitted and
   left to each module's own default. To override one, give that module's
   parameter a unique name first.
+
+  ---------------------------------------------------------------------------
+  RESOURCE NAMES ARE NOT HERE, AND THAT IS DELIBERATE
+
+  Every resource name derives from `labName` inside the module that creates it,
+  following <resourceType>-avdlab-<labName>. They are not parameters, so they
+  cannot be overridden.
+
+  That is a deliberate trade. Overridable names would mean two sources of truth
+  about what a lab's resources are called, and the management layer identifies a
+  lab by name alone -- it has to be able to work out what the host pool is called
+  from the lab name and nothing else. The storage account goes further and is
+  derived with uniqueString(), because its name must be globally unique; see
+  storage.bicep for why a predictable one is a trap.
 
   Values the orchestrator injects at runtime are also absent by design: module
   outputs (hostPoolId, subnetId, applicationGroupIds, sessionHostNames),
@@ -49,6 +62,15 @@ using none
 // ---------------------------------------------------------------------------
 // Lab-wide
 // ---------------------------------------------------------------------------
+
+// Identifies this lab. Every resource name derives from it, so changing it
+// deploys an entirely separate lab rather than renaming this one.
+//
+// 3-9 characters, lowercase letters and digits. The ceiling is the 15-character
+// Windows computer name limit: 'vm-' + labName + '-' + a two-digit index.
+//
+// Defaults to 'lab' so an existing clone keeps working without edits.
+param labName = 'lab'
 
 // Region for every resource. Must support Microsoft Entra Kerberos for Azure Files.
 param location = 'eastus2'
@@ -64,25 +86,21 @@ param tags = {
 // network.bicep
 // ---------------------------------------------------------------------------
 
-param vnetName = 'vnet-avdlab'
 param vnetCidr = '10.20.0.0/24'
-param subnetName = 'snet-avdlab-hosts'
 param subnetCidr = '10.20.0.0/26'
-param nsgName = 'nsg-avdlab-hosts'
 
-// The lab's single public IP, and it belongs to the NAT gateway -- never to a
-// session host. Outbound only. Default outbound access was retired on
-// 2026-03-31, so egress is now something you ask for explicitly.
-param natGatewayName = 'natgw-avdlab'
-param publicIpName = 'pip-avdlab-natgw'
+// Note there is no public IP parameter: the lab's single public IP belongs to
+// the NAT gateway, never to a session host, and its name is derived like every
+// other. Default outbound access was retired on 2026-03-31, so egress is now
+// something you ask for explicitly.
 
 // ---------------------------------------------------------------------------
 // storage.bicep — FSLogix profile containers
 // ---------------------------------------------------------------------------
 
-// Globally unique across all of Azure, 3-24 chars, lowercase alphanumeric only.
-// CHANGE THIS BEFORE DEPLOYING: the value below is certainly taken.
-param storageAccountName = 'stavdlabfslogix'
+// The storage account name is derived in storage.bicep from labName plus
+// uniqueString(resourceGroup().id) -- globally unique without being guessable,
+// and deterministic so a re-run converges. Nothing to set here.
 param shareName = 'profiles'
 param shareQuotaGb = 1024
 param storageSkuName = 'Standard_LRS'
@@ -90,10 +108,6 @@ param storageSkuName = 'Standard_LRS'
 // ---------------------------------------------------------------------------
 // hostpool.bicep / appgroup.bicep / workspace.bicep
 // ---------------------------------------------------------------------------
-
-param hostPoolName = 'hp-avdlab-pooled'
-param workspaceName = 'ws-avdlab'
-param appGroupName = 'dag-avdlab'
 
 param loadBalancerType = 'BreadthFirst'
 param maxSessionLimit = 4
@@ -103,7 +117,6 @@ param maxSessionLimit = 4
 // ---------------------------------------------------------------------------
 
 param sessionHostCount = 3
-param sessionHostPrefix = 'vm-avdlab'
 param vmSize = 'Standard_D4ads_v5'
 param adminUsername = 'avdlabadmin'
 
@@ -121,8 +134,6 @@ param imageSku = 'win11-25h2-avd'
 // ---------------------------------------------------------------------------
 // monitoring.bicep
 // ---------------------------------------------------------------------------
-
-param logAnalyticsWorkspaceName = 'log-avdlab'
 
 // The included-at-no-cost floor, deliberately not extended. This is a
 // short-lived lab, not a production workspace.
@@ -146,6 +157,5 @@ param costGuardrailMode = 'AlertOnly'
 // Bicep. The orchestrator passes them through at deployment time.
 // ---------------------------------------------------------------------------
 
-param scalingPlanName = 'sp-avdlab-weekday'
 param rampUpMinimumHostsPct = 50
 param rampDownMinimumHostsPct = 0
