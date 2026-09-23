@@ -68,6 +68,8 @@ vm-<labName>-0..n            session hosts
 
 Lab names are constrained to **3–12 characters, lowercase letters and digits**. That is not arbitrary: the Windows computer name limit is 15 characters, and `vm-<labName>-<n>` must fit inside it.
 
+`labName` **defaults to `lab`**. That keeps the current single-lab workflow working unchanged: someone who forks this repo and runs `Deploy-AvdLab.ps1` without knowing management exists gets exactly what they get today, under a slightly different set of resource names. A mandatory lab name would break every existing fork on update to buy nothing.
+
 ### The storage account is the hard case
 
 Storage account names are globally unique across all of Azure, 3–24 characters, lowercase alphanumeric with no hyphens. A predictable name like `stavdlab<labName>` would collide with every other person who forked this repo and picked the same lab name.
@@ -115,7 +117,7 @@ Tags die with the resource group. Everything you would want *after* a teardown n
 
 This lives in a storage account in a **separate control-plane resource group** (`rg-avdlab-control`), deliberately outside every lab so a teardown cannot touch it. One blob per lab, keyed by name and creation timestamp.
 
-**This introduces a genuine cost:** a tool whose selling point is "one resource group, delete it and you're done" now has a second, persistent resource group. That is a real regression in the teaching story and should be acknowledged rather than hidden. Mitigations: the control plane is created on demand rather than assumed, everything works without it in a degraded mode (you lose history, not function), and `Remove-AvdLabControlPlane` exists as an explicit escape hatch.
+> **Deferred — see [Decisions](#decisions).** The store is not being built yet. Tags alone carry steps 1–4 of the build order, and because tags are the source of truth, adding the store later is purely additive and costs no rework. This section stays as the design to reach for if the need proves real.
 
 ---
 
@@ -174,9 +176,62 @@ The reaper is what makes this a management solution rather than a nicer deployme
 
 Default behaviour is deliberately conservative: at expiry, **stop** rather than destroy. Stopping reclaims nearly all the cost, is reversible, and cannot lose work. Destroying is opt-in per lab (`-OnExpiry Destroy`).
 
-**Where it runs is an open decision** (see below). It must run unattended, which means it cannot depend on your laptop.
+A lab is never reaped silently. Every action writes to the workflow run log and sends a notification through the action group `monitoring.bicep` already deploys.
 
-A lab is never reaped silently. Every action writes a lifecycle event to the store and sends a notification, reusing the action group `monitoring.bicep` already deploys.
+### Where it runs: GitHub Actions
+
+A scheduled workflow authenticating to Azure by OIDC. No stored secrets, no Azure infrastructure to host it, and the repo already carries a commented-out OIDC job to build on. This supersedes the unbuilt `AlertAndDelete` cost-guardrail mode — a budget threshold that deletes a resource group is a worse version of the same idea, firing on 8–24-hour-stale cost data rather than on an explicit expiry. **`AlertAndDelete` should be retired from the spec when this is built**, and `costGuardrailMode` reduced to the alert it actually is.
+
+The workflow needs `permissions: id-token: write` for `azure/login@v2` to mint the token.
+
+> **The federated credential subject must match exactly, and the Azure portal makes it easy to get wrong.**
+>
+> If you create the credential in the portal and fill in the *optional* GitHub owner/repository ID fields, the portal writes a subject of the form `repo:<org>@<org-id>/<repo>@<repo-id>:<entity>:<value>`. The token GitHub actually sends carries `repo:<org>/<repo>:<entity>:<value>` — no numeric IDs. The two never match, and the failure is an authentication error that says nothing about why.
+>
+> Create the credential **without** the owner/repository ID fields.
+
+### The reaper must not be able to delete anything
+
+This is the part to get right, because the failure mode is not a broken lab — it is a scheduled job with standing authority to delete resource groups in your subscription, triggered by a workflow file that anyone with push access can edit.
+
+The default reaper stops labs, and stopping needs no delete permission at all. So the identity is given a **custom role that contains no delete action**:
+
+```
+Microsoft.Resources/subscriptions/resourceGroups/read
+Microsoft.Resources/tags/write                              # maintain lifecycle tags
+Microsoft.Compute/virtualMachines/read
+Microsoft.Compute/virtualMachines/instanceView/read
+Microsoft.Compute/virtualMachines/deallocate/action
+Microsoft.Compute/virtualMachines/start/action
+Microsoft.DesktopVirtualization/hostPools/read
+Microsoft.DesktopVirtualization/hostPools/sessionHosts/read
+Microsoft.DesktopVirtualization/hostPools/sessionHosts/write   # drain mode
+Microsoft.DesktopVirtualization/scalingPlans/read
+Microsoft.DesktopVirtualization/scalingPlans/write             # disable the plan
+```
+
+The built-in combination (`Virtual Machine Contributor` + `Desktop Virtualization Contributor`) is the tempting shortcut and is wrong: it cannot delete a resource group, but it *can* delete individual VMs, which is enough to ruin a lab by accident. The custom role cannot delete a thing.
+
+`-OnExpiry Destroy` therefore cannot run under the default identity, by construction. It requires a second, more privileged federated credential bound to a **protected GitHub environment** with a required reviewer — so automatic destruction is possible, but only behind an explicit human approval. That is the right shape for an unattended job whose worst outcome is deleting someone's work.
+
+---
+
+## Cost estimation
+
+Cost is **estimated live** rather than read from Cost Management, because Azure cost data lags 8–24 hours and a management tool that reports yesterday's number for a lab you started this morning is worse than useless — it reads as zero.
+
+Two inputs, neither of which needs the durable store:
+
+**Rates** come from the Azure Retail Prices API (`https://prices.azure.com/api/retail/prices`) — public, unauthenticated, no key, no module. Filter on `armRegionName`, `armSkuName`, `priceType eq 'Consumption'`; `retailPrice` is the hourly figure. Rates are cached per session; they do not move within a run.
+
+**Compute hours** accumulate in tags, maintained by the only two commands that change power state:
+
+- `Start-AvdLab` stamps `avdlab-running-since`
+- `Stop-AvdLab` adds the elapsed stretch to `avdlab-compute-hours` and clears `avdlab-running-since`
+
+Current cost is then `avdlab-compute-hours + (now - avdlab-running-since)` × rate, plus the fixed drip of the NAT gateway, public IP and storage. No store, no Activity Log query, no new dependency.
+
+**Where this is wrong, and why that is acceptable:** if someone deallocates a VM by hand in the portal, the tag over-counts until the next `Stop-AvdLab`. The number is labelled an estimate, it errs high, and erring high on a cost display is the safe direction. Reconstructing true uptime from the Activity Log is the accuracy upgrade if the estimate ever proves misleading in practice — it is free and retained 90 days, but it is a second mechanism to maintain and is not worth it until the simple one demonstrably fails.
 
 ---
 
@@ -187,10 +242,21 @@ A lab is never reaped silently. Every action writes a lifecycle event to the sto
 | `avdlab.bicepparam` | Names become templates over `labName`; `storageAccountName` is derived, not supplied |
 | all 8 modules | Accept `labName`; apply the `avdlab-*` tag set |
 | `storage.bicep` | Derive the storage account name |
-| `Deploy-AvdLab.ps1` | `-LabName`, `-ExpiresIn`, `-Purpose`; write tags; publish the as-built to the store; drop the storage-name availability pre-flight |
-| `Remove-AvdLab.ps1` | `-LabName`; capture final cost to the store before deleting |
+| `Deploy-AvdLab.ps1` | `-LabName`, `-ExpiresIn`, `-Purpose`; write tags; drop the storage-name availability pre-flight (the name is derived now, so it cannot collide) |
+| `Remove-AvdLab.ps1` | `-LabName`; report final estimated cost before deleting |
 | `Test-AvdLabDeployment.ps1` | `-LabName`; resolve names from tags |
 | `AvdLab.Tests.ps1` | Naming-scheme tests; lab-name validation; the 15-character computer-name limit |
+
+New files:
+
+| File | Purpose |
+| --- | --- |
+| `scripts/Get-AvdLab.ps1`, `Stop-`, `Start-`, `Set-`, `Reset-` | The lifecycle verbs |
+| `scripts/Invoke-AvdLabReaper.ps1` | Runs unattended; callable by hand for a dry run |
+| `.github/workflows/reaper.yml` | Scheduled execution, OIDC login |
+| `bicep/modules/reaperrole.bicep` | The delete-free custom role definition, deployed once at subscription scope |
+
+Archiving to the durable store (as-built on deploy, final cost on teardown) attaches to these same two scripts if and when the store is built. It is deliberately absent above.
 
 The deployment path itself does not change shape. This is additive.
 
@@ -209,26 +275,44 @@ Holding the line, since this is the change most likely to make the repo unreadab
 
 ---
 
-## Open decisions
+## Decisions
 
-1. **Where the reaper runs.** GitHub Actions on a schedule with OIDC federated credentials is the leading option: the repo already has a commented-out OIDC job, it stores no secrets, and it needs no new Azure infrastructure. The alternative is an Azure Automation account, already sketched for the unbuilt `AlertAndDelete` mode — more durable, but it is more infrastructure inside the thing being managed. **Recommendation: GitHub Actions**, and retire the `AlertAndDelete` design in favour of the reaper, which supersedes it.
+**Reaper runs in GitHub Actions.** Scheduled workflow, OIDC, no stored secrets, no Azure infrastructure to host it. Retires the unbuilt `AlertAndDelete` guardrail mode, which it supersedes.
 
-2. **Whether the control plane is required or optional.** Optional-with-degradation is proposed above, but that means two code paths for every store write. Making it required is simpler to build and harder to explain.
+**Cost is estimated live**, from the Retail Prices API and tag-accumulated compute hours, rather than read from Cost Management with its 8–24 hour lag.
 
-3. **Cost figures are not real-time.** Azure cost data lags 8–24 hours, so `Get-AvdLab` cost is always yesterday's. Either show it with the lag stated, or compute an estimate from VM size and uptime. Estimating is more useful and more likely to be wrong.
+**`labName` defaults to `lab`**, so existing forks keep working on update.
 
-4. **What happens to the existing single-lab workflow.** Threading `labName` everywhere is a breaking change to the parameter file. Either default `labName = 'lab'` so the current workflow keeps working, or make it mandatory and force the decision. **Recommendation: default it**, since the repo is public and a fork should not break on update.
+**The durable store is deferred, not rejected.** You were unsure, and the position this spec takes is that you do not need to decide yet — the sequencing already protects you:
+
+- The other three decisions shrank what the store was for. Live cost estimation means there is no cost history to persist from an API, and GitHub Actions retains workflow run logs, so reaper lifecycle events already have a durable-enough home.
+- Tags are the source of truth regardless. The store is an archive, never consulted to decide what exists, so bolting it on at step 5 requires no rework of steps 1–4.
+- Steps 1–4 deliver the entire operational win — several labs, inventory, stop paying for idle ones — with no store at all.
+
+So: build the core, run real labs for a few weeks, and the question answers itself with evidence instead of speculation. What you would lose in the meantime is history for labs torn down before the store exists, which is a small and bounded cost.
+
+**One observation that changes the trade, though.** The original argument against a control plane was that it breaks the "one resource group, delete it and you're done" story. Choosing GitHub Actions means that story is *already* gone the moment management is switched on: the reaper needs a persistent Entra app registration, a federated credential and a custom role definition, none of which live in a lab resource group. A storage account alongside them is marginal rather than a new category of thing.
+
+What actually protects the teaching story is that **management is opt-in**. A fork that never sets `-ExpiresIn` and never enables the workflow has no control plane, no reaper identity, and the same single-resource-group teardown as today. That, rather than avoiding the store, is the thing worth holding onto.
+
+### Still open
+
+Nothing blocking. Revisit the store at step 5.
 
 ---
 
 ## Build order
 
-1. Lab naming and tags across the modules — everything else depends on identity existing
-2. `Deploy-AvdLab -LabName` + tag writing; confirm two labs coexist in one subscription
-3. `Get-AvdLab` — inventory from tags, no store yet
-4. `Stop-AvdLab` / `Start-AvdLab` — the four-step sequence, and the state detection that proves it worked
-5. Control-plane store + as-built publishing
-6. `Set-AvdLab`, `Reset-AvdLab`
-7. `Invoke-AvdLabReaper` + scheduled execution
+Reordered from the first draft: with the store deferred and the reaper confirmed, unattended expiry is worth more than archival.
 
-Steps 1–4 are the useful core: after them you can run several labs and stop paying for idle ones. Everything after is convenience and durability.
+1. **Lab naming and tags** across the modules — everything else depends on identity existing
+2. **`Deploy-AvdLab -LabName`** + tag writing; confirm two labs genuinely coexist in one subscription
+3. **`Get-AvdLab`** — inventory from tags, with the live cost estimate
+4. **`Stop-AvdLab` / `Start-AvdLab`** — the four-step sequence, and the state detection that proves it actually stopped
+5. **`Set-AvdLab`, `Reset-AvdLab`** — extend, retag, clean profiles
+6. **`Invoke-AvdLabReaper`** + the custom role, federated credential and scheduled workflow
+7. **Control-plane store** — deferred; revisit only if the missing history proves to hurt
+
+Steps 1–4 are the useful core: after them you can run several labs and stop paying for the idle ones. Step 6 is what makes it unattended. Step 7 may never be needed.
+
+**Suggested stopping point for a first pass: step 4.** It is self-contained, needs no new Azure identity or workflow, and is the point at which the tool stops being a deployment script.
