@@ -1,0 +1,451 @@
+{
+  "version": 1,
+  "description": "The one list of deployment parameters. The chat setup, the command line and the GitHub Actions form all read it, and each parameter maps onto a Terraform variable in a stage. Format: schema/README.md.",
+  "phases": [
+    {
+      "id": "discover",
+      "title": "Discover",
+      "summary": "What you want to run: environment and identity model."
+    },
+    {
+      "id": "prepare",
+      "title": "Prepare",
+      "summary": "Later: read-only readiness checks (roles, providers, region, quota, tools). No parameters."
+    },
+    {
+      "id": "configure",
+      "title": "Configure",
+      "summary": "Names, network, users, hosts and the profile share. Writes the tfvars."
+    },
+    {
+      "id": "bootstrap",
+      "title": "Bootstrap",
+      "summary": "Later: the one admin step that creates the deployment identity and state."
+    },
+    {
+      "id": "deploy",
+      "title": "Deploy",
+      "summary": "Later: plan, an explicit yes, then apply."
+    },
+    {
+      "id": "first_run",
+      "title": "First-run steps",
+      "summary": "Later: the tenant steps Terraform can't do, such as admin consent for the profile share's Entra app."
+    },
+    {
+      "id": "verify",
+      "title": "Verify",
+      "summary": "Later: post-deploy checks and a first sign-in."
+    },
+    {
+      "id": "handover",
+      "title": "Handover",
+      "summary": "Later: the environment's runbook."
+    }
+  ],
+  "stages": {
+    "platform": "environments/{env}/01-platform"
+  },
+  "output_file": "setup.auto.tfvars.json",
+  "constants": [],
+  "parameters": [
+    {
+      "id": "environment",
+      "phase": "discover",
+      "type": "enum",
+      "question": "Is this a sandbox, a dev environment or production?",
+      "help": "Sets the environment tag. Production should run through the Actions approval gate.",
+      "choices": [
+        {
+          "value": "sandbox",
+          "label": "Sandbox: try it out, tear it down"
+        },
+        {
+          "value": "dev",
+          "label": "Dev: shared test environment"
+        },
+        {
+          "value": "prod",
+          "label": "Production"
+        }
+      ],
+      "default": "sandbox",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "environment"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "identity_model",
+      "phase": "discover",
+      "type": "enum",
+      "question": "How will the session hosts join a directory?",
+      "help": "Entra-joined needs no domain controllers and uses Entra Kerberos for the FSLogix share. It is the only model the kit builds for now.",
+      "choices": [
+        {
+          "value": "entra_joined",
+          "label": "Entra-joined (recommended, no domain controllers)"
+        },
+        {
+          "value": "entra_ds",
+          "label": "Entra Domain Services",
+          "supported": false,
+          "reason": "Domain join for session hosts comes in a later phase."
+        },
+        {
+          "value": "ad_ds",
+          "label": "Active Directory Domain Services (hybrid)",
+          "supported": false,
+          "reason": "Domain join and the AzFilesHybrid step come in a later phase."
+        }
+      ],
+      "default": "entra_joined",
+      "form": true,
+      "sources": [
+        "https://learn.microsoft.com/azure/virtual-desktop/authentication"
+      ]
+    },
+    {
+      "id": "tenant_id",
+      "phase": "configure",
+      "type": "uuid",
+      "source": "tenant",
+      "ask": "never",
+      "question": "Entra tenant",
+      "help": "Read from the signed-in account, never asked or saved.",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "tenant_id"
+        }
+      ]
+    },
+    {
+      "id": "subscription_id",
+      "phase": "configure",
+      "type": "uuid",
+      "source": "subscription",
+      "ask": "never",
+      "question": "Subscription",
+      "help": "Read from the signed-in account, never asked or saved.",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "subscription_id"
+        }
+      ]
+    },
+    {
+      "id": "location",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "question": "Which Azure region?",
+      "help": "Pick the region closest to your users; AVD latency follows distance to the session hosts.",
+      "default": "eastus2",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "location"
+        }
+      ],
+      "form": true,
+      "sources": [
+        "https://learn.microsoft.com/azure/virtual-desktop/prerequisites"
+      ]
+    },
+    {
+      "id": "availability_zones",
+      "phase": "configure",
+      "type": "string_list",
+      "question": "Which availability zones should hosts spread over?",
+      "help": "Leave empty in a region without zones. With zones, the NAT IP is zone-redundant and the profile share ZRS.",
+      "default": [],
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "availability_zones"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "prefix",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,12}$",
+      "question": "Short name prefix for resources?",
+      "help": "2-13 lowercase letters, digits or hyphens, for example avd-dev. Every resource name starts from it.",
+      "default": "avd-{environment}",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "prefix"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "address_space",
+      "phase": "configure",
+      "type": "cidr",
+      "question": "Address space for the AVD virtual network?",
+      "help": "Must not overlap your other networks if you peer to a hub or on-premises.",
+      "default": "10.50.0.0/20",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "address_space",
+          "render": "list"
+        }
+      ],
+      "checks": [
+        "subnets_in_address_space"
+      ]
+    },
+    {
+      "id": "session_hosts_subnet",
+      "phase": "configure",
+      "type": "cidr",
+      "min_prefix": 16,
+      "max_prefix": 26,
+      "question": "Subnet for the session hosts?",
+      "help": "One address per host; a /22 leaves room for about 1000.",
+      "default": "10.50.0.0/22",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "subnets.session_hosts"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "private_endpoints_subnet",
+      "phase": "configure",
+      "type": "cidr",
+      "min_prefix": 16,
+      "max_prefix": 28,
+      "question": "Subnet for private endpoints?",
+      "help": "Holds the profile share and Key Vault endpoints.",
+      "default": "10.50.4.0/27",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "subnets.private_endpoints"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "dns_servers",
+      "phase": "configure",
+      "type": "ipv4_list",
+      "question": "Custom DNS servers?",
+      "help": "Leave empty for Azure DNS. A hub resolver must resolve the privatelink zones.",
+      "default": [],
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "dns_servers"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "hub_vnet_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Hub virtual network to peer with?",
+      "help": "Leave empty for a standalone spoke. The hub side of the peering is not managed here.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "hub_vnet_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "create_nat_gateway",
+      "phase": "configure",
+      "type": "bool",
+      "question": "Give session hosts outbound internet through a NAT gateway?",
+      "help": "New subnets have no default outbound access. Say no only when a hub firewall handles egress.",
+      "default": true,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "create_nat_gateway"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "user_groups",
+      "phase": "configure",
+      "type": "group_list",
+      "min_items": 1,
+      "question": "Which Entra groups hold the AVD users?",
+      "help": "They get the desktop, sign-in to the hosts and their own profile container.",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "user_group_object_ids"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "admin_groups",
+      "phase": "configure",
+      "type": "group_list",
+      "question": "Which Entra groups hold the AVD admins?",
+      "help": "Admin sign-in to the hosts, profile admin and read access to the break-glass credential.",
+      "default": [],
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "admin_group_object_ids"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "host_count",
+      "phase": "configure",
+      "type": "int",
+      "min": 0,
+      "max": 999,
+      "question": "How many session hosts?",
+      "help": "Autoscale starts and stops them; this is the most that can run.",
+      "default": 1,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "host_count"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "vm_size",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^Standard_[A-Za-z0-9_]+$",
+      "question": "Session host VM size?",
+      "help": "Memory-optimized E-series suits multi-session hosts. Check vCPU quota for its family first.",
+      "default": "Standard_E4as_v5",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "vm_size"
+        }
+      ],
+      "form": true,
+      "sources": [
+        "https://learn.microsoft.com/windows-server/remote/remote-desktop-services/virtual-machine-recs"
+      ]
+    },
+    {
+      "id": "max_sessions_per_host",
+      "phase": "configure",
+      "type": "int",
+      "min": 1,
+      "max": 50,
+      "question": "Most users on one host?",
+      "help": "A conservative start; tune it after a load test.",
+      "default": 8,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "max_sessions_per_host"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "time_zone",
+      "phase": "configure",
+      "type": "string",
+      "question": "Time zone for the autoscale schedule?",
+      "help": "A Windows time zone ID, for example Eastern Standard Time.",
+      "default": "UTC",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "time_zone"
+        }
+      ],
+      "form": true
+    },
+    {
+      "id": "image_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Gallery image version from the image pipeline?",
+      "help": "Leave empty to use the Windows 11 multi-session with Microsoft 365 marketplace image.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "image_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "enroll_in_intune",
+      "phase": "configure",
+      "type": "bool",
+      "question": "Enroll the hosts in Intune?",
+      "help": "Needs Intune licensing and automatic MDM enrollment for the hosts.",
+      "default": false,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "enroll_in_intune"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "fslogix_share_quota_gb",
+      "phase": "configure",
+      "type": "int",
+      "min": 100,
+      "max": 102400,
+      "question": "Profile share size in GiB?",
+      "help": "Premium shares bill on provisioned size; IOPS grow with it.",
+      "default": 100,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "fslogix_share_quota_gb"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "workspace_friendly_name",
+      "phase": "configure",
+      "type": "string",
+      "question": "Workspace name users see?",
+      "help": "Shown in the Windows App feed.",
+      "default": "Virtual Desktop",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "workspace_friendly_name"
+        }
+      ],
+      "ask": "advanced"
+    }
+  ]
+}

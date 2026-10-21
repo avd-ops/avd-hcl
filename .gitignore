@@ -29,3 +29,7 @@ readiness.json
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Lock files belong to roots (environments/), not to reusable modules.
+modules/**/.terraform.lock.hcl
+__pycache__/

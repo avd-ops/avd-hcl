@@ -15,6 +15,8 @@ page, not a copy.
 
 - [port-plan.md](port-plan.md): what maps from nerdio-hcl, what is redesigned, what is new, open
   questions and the phased order.
+- [platform.md](platform.md): what the platform stage builds, where each module comes from,
+  and the gotchas found writing it.
 - [decisions/](decisions/): decision records in MADR 4 format.
 
 avd-hcl is a standalone project, not part of the avd-ops family. KB tooling (index generation,
