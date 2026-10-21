@@ -16,6 +16,8 @@ page, not a copy.
 - [port-plan.md](port-plan.md): what maps from nerdio-hcl, what is redesigned, what is new, open
   questions and the phased order.
 - [decisions/](decisions/): decision records in MADR 4 format.
+- [github-settings-spec.md](github-settings-spec.md): this repository's GitHub settings as
+  Terraform in `github/`, with a read-only drift check (proposed).
 
 avd-hcl is a standalone project, not part of the avd-ops family. KB tooling (index generation,
 validation, prior-art and freshness checks) may be added later; it isn't installed yet.
