@@ -41,6 +41,9 @@ the pull request that brings it.
 
 - Each module follows the landing zone's Bicep module of the same role, with a source header and
   a CREDITS row, and carries its lessons as `terraform test` runs.
+- azapi fills the gaps azurerm 5.10 has: the session host VM, its password secret and the
+  registration run command use azapi's write-only `sensitive_body`, so no secret is kept in state
+  (guardrail 5; [platform.md](../platform.md)).
 - Revisit when the AVM AVD modules support azurerm 5: swapping the control plane module for AVM
   then is a change behind the same inputs and outputs.
 

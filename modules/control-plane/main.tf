@@ -30,15 +30,26 @@ resource "azurerm_virtual_desktop_host_pool" "this" {
   }
 }
 
-# A short-lived registration token. time_rotating is replaced once the token has expired, so the
-# next apply after that issues a new one for any host it adds.
+# A short-lived registration token. The expiry is set on the host pool through ARM, and the token
+# itself is only ever read ephemerally (modules/session-hosts), so it is never kept in state
+# (guardrail 5). azurerm_virtual_desktop_host_pool_registration_info would store it.
+# time_rotating is replaced once the token has expired, so the next apply after that issues a new
+# one for any host it adds.
 resource "time_rotating" "registration" {
   rotation_hours = var.registration_token_hours
 }
 
-resource "azurerm_virtual_desktop_host_pool_registration_info" "this" {
-  hostpool_id     = azurerm_virtual_desktop_host_pool.this.id
-  expiration_date = time_rotating.registration.rotation_rfc3339
+resource "azapi_update_resource" "registration" {
+  type        = "Microsoft.DesktopVirtualization/hostPools@2024-04-03"
+  resource_id = azurerm_virtual_desktop_host_pool.this.id
+  body = {
+    properties = {
+      registrationInfo = {
+        expirationTime             = time_rotating.registration.rotation_rfc3339
+        registrationTokenOperation = "Update"
+      }
+    }
+  }
 }
 
 resource "azurerm_virtual_desktop_application_group" "desktop" {

@@ -61,6 +61,7 @@ module "network" {
   availability_zones  = var.availability_zones
   hub_vnet_id         = var.hub_vnet_id
   create_nat_gateway  = var.create_nat_gateway
+  egress_firewall_ip  = var.egress_firewall_ip
 }
 
 module "monitoring" {
@@ -73,18 +74,6 @@ module "monitoring" {
   retention_in_days   = var.log_retention_days
 }
 
-# The break-glass local admin password: generated, kept in Key Vault, never typed or remembered
-# (avd-landing-zone lesson 0002). It is also in state, as every VM admin password is, so the
-# state backend must be private and Entra-authenticated (backend.tf).
-resource "random_password" "local_admin" {
-  length           = 24
-  min_lower        = 2
-  min_upper        = 2
-  min_numeric      = 2
-  min_special      = 2
-  override_special = "!#%*()-_=+[]{}:?"
-}
-
 module "key_vault" {
   source                     = "../../../modules/key-vault"
   name                       = local.names.key_vault
@@ -94,7 +83,6 @@ module "key_vault" {
   private_endpoint_subnet_id = module.network.subnet_ids["private_endpoints"]
   private_dns_zone_id        = module.network.private_dns_zone_ids["vault"]
   local_admin_username       = var.local_admin_username
-  local_admin_password       = random_password.local_admin.result
   admin_group_object_ids     = var.admin_group_object_ids
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
 }
@@ -115,8 +103,11 @@ module "fslogix" {
 }
 
 # Microsoft documents this role at subscription scope: autoscale doesn't work properly when it
-# is granted lower, such as on a resource group.
+# is granted lower, such as on a resource group. One assignment serves every host pool in the
+# subscription, so only one root (or the landing zone) owns it: set grant_avd_power_role = false
+# in every other environment of the same subscription, or destroying one would remove it from all.
 resource "azurerm_role_assignment" "avd_power_on_off" {
+  count                = var.grant_avd_power_role ? 1 : 0
   scope                = data.azurerm_subscription.current.id
   role_definition_name = "Desktop Virtualization Power On Off Contributor"
   principal_id         = local.avd_service_principal_object_id
@@ -159,8 +150,9 @@ module "session_hosts" {
   subnet_id                = module.network.subnet_ids["session_hosts"]
   enroll_in_intune         = var.enroll_in_intune
   local_admin_username     = var.local_admin_username
-  local_admin_password     = random_password.local_admin.result
-  registration_token       = module.control_plane.registration_token
+  local_admin_password     = module.run_secrets.local_admin_password
+  key_vault_id             = module.key_vault.key_vault_id
+  registration_token       = module.run_secrets.registration_token
   data_collection_rule_id  = module.monitoring.data_collection_rule_id
   profile_share_unc        = module.fslogix.profile_share_unc
   fslogix_profile_size_mib = var.fslogix_profile_size_mib
@@ -168,5 +160,34 @@ module "session_hosts" {
   admin_group_object_ids   = var.admin_group_object_ids
 
   # The hosts mount the profile share over its private endpoint as they register.
-  depends_on = [module.fslogix]
+  depends_on = [module.fslogix, terraform_data.preflight]
+}
+
+# Secrets for this run, never stored: see modules/run-secrets.
+module "run_secrets" {
+  source                  = "../../../modules/run-secrets"
+  host_pool_id            = module.control_plane.registration_host_pool_id
+  read_registration_token = var.host_count > 0
+
+  providers = {
+    azapi.secrets = azapi.secrets
+  }
+}
+
+# Encryption at host needs a subscription feature. Read it at plan time, so a subscription without
+# it stops the plan before anything is created, instead of failing at the first VM.
+data "azapi_resource" "encryption_at_host_feature" {
+  count                  = var.encryption_at_host ? 1 : 0
+  type                   = "Microsoft.Features/providers/features@2021-07-01"
+  resource_id            = "${data.azurerm_subscription.current.id}/providers/Microsoft.Features/providers/Microsoft.Compute/features/EncryptionAtHost"
+  response_export_values = ["properties.state"]
+}
+
+resource "terraform_data" "preflight" {
+  lifecycle {
+    precondition {
+      condition     = !var.encryption_at_host || try(data.azapi_resource.encryption_at_host_feature[0].output.properties.state, "") == "Registered"
+      error_message = "encryption_at_host needs the Microsoft.Compute/EncryptionAtHost feature: run `az feature register --namespace Microsoft.Compute --name EncryptionAtHost`, wait until it shows Registered, then `az provider register -n Microsoft.Compute`. Or set encryption_at_host = false."
+    }
+  }
 }

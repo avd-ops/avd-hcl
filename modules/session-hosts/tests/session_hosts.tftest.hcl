@@ -4,7 +4,10 @@ mock_provider "azurerm" {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/networkInterfaces/nic-test"
     }
   }
-  mock_resource "azurerm_windows_virtual_machine" {
+}
+
+mock_provider "azapi" {
+  mock_resource "azapi_resource" {
     defaults = {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Compute/virtualMachines/vm-test"
     }
@@ -20,6 +23,7 @@ variables {
   availability_zones      = ["1", "2"]
   subnet_id               = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/virtualNetworks/vnet-test/subnets/snet-session-hosts"
   local_admin_password    = "Placeholder-only-for-tests-1!"
+  key_vault_id            = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.KeyVault/vaults/kv-test"
   registration_token      = "placeholder-only-for-tests"
   data_collection_rule_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Insights/dataCollectionRules/microsoft-avdi-test"
   profile_share_unc       = "\\\\sttestprofiles.file.core.windows.net\\profiles"
@@ -36,18 +40,28 @@ run "hosts_spread_over_zones" {
   }
 
   assert {
-    condition     = azurerm_windows_virtual_machine.host["avdtest-001"].zone == "1" && azurerm_windows_virtual_machine.host["avdtest-002"].zone == "2" && azurerm_windows_virtual_machine.host["avdtest-003"].zone == "1"
+    condition     = azapi_resource.host["avdtest-001"].body.zones == ["1"] && azapi_resource.host["avdtest-002"].body.zones == ["2"] && azapi_resource.host["avdtest-003"].body.zones == ["1"]
     error_message = "Hosts go round robin over the zones."
   }
 
   assert {
-    condition     = azurerm_windows_virtual_machine.host["avdtest-001"].secure_boot_enabled && azurerm_windows_virtual_machine.host["avdtest-001"].vtpm_enabled
+    condition     = azapi_resource.host["avdtest-001"].body.properties.securityProfile.securityType == "TrustedLaunch"
     error_message = "Hosts are Trusted Launch."
   }
 
   assert {
-    condition     = azurerm_windows_virtual_machine.host["avdtest-001"].license_type == "Windows_Client"
+    condition     = azapi_resource.host["avdtest-001"].body.properties.licenseType == "Windows_Client"
     error_message = "Multi-session hosts use Windows client licensing."
+  }
+
+  assert {
+    condition     = !can(azapi_resource.host["avdtest-001"].body.properties.osProfile.adminPassword)
+    error_message = "The admin password must only travel in the write-only sensitive_body."
+  }
+
+  assert {
+    condition     = azapi_resource.local_admin_password["avdtest-002"].name == "avdtest-002-localadmin"
+    error_message = "Each host gets its own break-glass secret."
   }
 
   assert {
@@ -56,8 +70,13 @@ run "hosts_spread_over_zones" {
   }
 
   assert {
-    condition     = one(azurerm_virtual_machine_run_command.register_agent["avdtest-001"].protected_parameter).name == "RegistrationToken"
-    error_message = "The registration token goes in as a protected parameter."
+    condition     = azapi_resource.register_agent["avdtest-001"].body.properties.treatFailureAsDeploymentFailure && !azapi_resource.register_agent["avdtest-001"].body.properties.asyncExecution
+    error_message = "A failing registration script must fail the apply."
+  }
+
+  assert {
+    condition     = !can(azapi_resource.register_agent["avdtest-001"].body.properties.protectedParameters)
+    error_message = "The registration token must only travel in the write-only sensitive_body."
   }
 }
 
@@ -71,7 +90,7 @@ run "regional_hosts_and_intune" {
   }
 
   assert {
-    condition     = azurerm_windows_virtual_machine.host["avdtest-001"].zone == null
+    condition     = !can(azapi_resource.host["avdtest-001"].body.zones)
     error_message = "No zones in a region without them."
   }
 
@@ -90,7 +109,7 @@ run "gallery_image" {
   }
 
   assert {
-    condition     = length(azurerm_windows_virtual_machine.host["avdtest-001"].source_image_reference) == 0
+    condition     = azapi_resource.host["avdtest-001"].body.properties.storageProfile.imageReference.id == var.image_id
     error_message = "A gallery image replaces the marketplace reference."
   }
 }
@@ -102,7 +121,7 @@ run "one_image_source_only" {
     image_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Compute/galleries/gal_test/images/avd/versions/1.0.0"
   }
 
-  expect_failures = [azurerm_windows_virtual_machine.host]
+  expect_failures = [azapi_resource.host]
 }
 
 run "long_prefix_is_rejected" {

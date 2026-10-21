@@ -1,4 +1,7 @@
 # Plan-only test with mocked providers: the whole platform wires up without a tenant.
+# Mock providers can't open ephemeral resources yet, so these runs plan zero session hosts (which
+# skips reading the registration token) and the real random provider makes the ephemeral
+# password offline. modules/session-hosts/tests covers the hosts themselves.
 
 mock_provider "azurerm" {
   mock_data "azurerm_subscription" {
@@ -71,11 +74,6 @@ mock_provider "azurerm" {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/networkInterfaces/nic-test"
     }
   }
-  mock_resource "azurerm_windows_virtual_machine" {
-    defaults = {
-      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Compute/virtualMachines/vm-test"
-    }
-  }
 }
 
 mock_provider "azuread" {
@@ -86,9 +84,40 @@ mock_provider "azuread" {
   }
 }
 
-mock_provider "azapi" {}
-mock_provider "random" {}
+mock_provider "azapi" {
+  mock_data "azapi_resource" {
+    defaults = {
+      output = {
+        properties = {
+          state = "Registered"
+        }
+      }
+    }
+  }
+  mock_resource "azapi_resource" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Compute/virtualMachines/vm-test"
+    }
+  }
+}
+
+# The mock providers can't open ephemeral resources yet, so the run's secrets are overridden.
+
 mock_provider "time" {}
+
+# A real azapi provider for modules/run-secrets, whose ephemeral read a mock can't hold. With no
+# session hosts the read is skipped, so this provider never calls Azure; the placeholder settings only
+# let it start without a sign-in.
+provider "azapi" {
+  alias           = "secrets"
+  subscription_id = "00000000-0000-0000-0000-000000000000"
+  tenant_id       = "00000000-0000-0000-0000-000000000001"
+  client_id       = "00000000-0000-0000-0000-000000000007"
+  client_secret   = "placeholder-never-used"
+  use_cli         = false
+  use_msi         = false
+  use_oidc        = false
+}
 
 variables {
   tenant_id              = "00000000-0000-0000-0000-000000000001"
@@ -97,14 +126,15 @@ variables {
   prefix                 = "avd-test"
   user_group_object_ids  = ["00000000-0000-0000-0000-000000000004"]
   admin_group_object_ids = ["00000000-0000-0000-0000-000000000005"]
+  host_count             = 0
 }
 
 run "sandbox_defaults" {
   command = plan
 
   assert {
-    condition     = output.session_host_names == ["avdsh-001"]
-    error_message = "One host by default."
+    condition     = output.session_host_names == []
+    error_message = "No hosts were asked for."
   }
 
   assert {
@@ -118,12 +148,12 @@ run "sandbox_defaults" {
   }
 
   assert {
-    condition     = azurerm_role_assignment.avd_power_on_off.scope == "/subscriptions/00000000-0000-0000-0000-000000000000"
+    condition     = azurerm_role_assignment.avd_power_on_off[0].scope == "/subscriptions/00000000-0000-0000-0000-000000000000"
     error_message = "Autoscale needs Power On Off Contributor at subscription scope."
   }
 
   assert {
-    condition     = azurerm_role_assignment.avd_power_on_off.principal_id == "00000000-0000-0000-0000-000000000003"
+    condition     = azurerm_role_assignment.avd_power_on_off[0].principal_id == "00000000-0000-0000-0000-000000000003"
     error_message = "The AVD service principal is looked up when not given."
   }
 }
@@ -142,9 +172,49 @@ run "given_service_principal_skips_the_lookup" {
   }
 
   assert {
-    condition     = azurerm_role_assignment.avd_power_on_off.principal_id == "00000000-0000-0000-0000-000000000006"
+    condition     = azurerm_role_assignment.avd_power_on_off[0].principal_id == "00000000-0000-0000-0000-000000000006"
     error_message = "The given object ID is used."
   }
+}
+
+run "second_environment_leaves_the_power_role_alone" {
+  command = plan
+
+  variables {
+    grant_avd_power_role = false
+  }
+
+  assert {
+    condition     = length(azurerm_role_assignment.avd_power_on_off) == 0
+    error_message = "Only one environment per subscription owns the subscription-scope role."
+  }
+}
+
+run "missing_encryption_at_host_feature_stops_the_plan" {
+  command = plan
+
+  override_data {
+    target = data.azapi_resource.encryption_at_host_feature[0]
+    values = {
+      output = {
+        properties = {
+          state = "NotRegistered"
+        }
+      }
+    }
+  }
+
+  expect_failures = [terraform_data.preflight]
+}
+
+run "double_hyphen_prefix_is_rejected" {
+  command = plan
+
+  variables {
+    prefix = "avd--dev"
+  }
+
+  expect_failures = [var.prefix]
 }
 
 run "no_user_group_is_rejected" {

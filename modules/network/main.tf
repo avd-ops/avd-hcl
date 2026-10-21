@@ -37,7 +37,10 @@ resource "azurerm_subnet" "private_endpoints" {
   default_outbound_access_enabled   = false
 }
 
-# Session hosts only need outbound access to the AVD control plane; inbound stays closed.
+# Inbound stays closed: no rule allows it. The outbound rules name the flows the hosts need, but
+# they don't restrict anything on their own, because the default AllowInternetOutBound rule still
+# applies. Locking egress down to the AVD required URLs is the hub firewall's job, or comes with
+# hardening in a later phase.
 resource "azurerm_network_security_group" "session_hosts" {
   name                = "nsg-${var.prefix}-session-hosts"
   location            = var.location
@@ -135,8 +138,8 @@ resource "azurerm_virtual_network_peering" "to_hub" {
   use_remote_gateways       = var.use_remote_gateways
 }
 
-# The subnets have no default outbound access, so session hosts need an explicit path out.
-# Use this NAT gateway, or route 0.0.0.0/0 to a hub firewall and turn it off.
+# The subnets have no default outbound access, so session hosts need an explicit path out:
+# this NAT gateway, or a default route to a hub firewall (egress_firewall_ip). One is required.
 # The gateway itself stays regional; its IP is zone-redundant only where the region has zones,
 # because a zoned IP fails in a region without them (avd-landing-zone lesson 0001).
 resource "azurerm_public_ip" "nat" {
@@ -169,4 +172,28 @@ resource "azurerm_subnet_nat_gateway_association" "session_hosts" {
   count          = var.create_nat_gateway ? 1 : 0
   subnet_id      = azurerm_subnet.session_hosts.id
   nat_gateway_id = azurerm_nat_gateway.this[0].id
+}
+
+# Default route to a hub firewall, for when the hub handles egress instead of the NAT gateway.
+# Peering alone doesn't send internet traffic through the hub.
+resource "azurerm_route_table" "session_hosts" {
+  count                         = var.egress_firewall_ip == null ? 0 : 1
+  name                          = "rt-${var.prefix}-session-hosts"
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  bgp_route_propagation_enabled = false
+  tags                          = var.tags
+
+  route {
+    name                   = "default-to-firewall"
+    address_prefix         = "0.0.0.0/0"
+    next_hop_type          = "VirtualAppliance"
+    next_hop_in_ip_address = var.egress_firewall_ip
+  }
+}
+
+resource "azurerm_subnet_route_table_association" "session_hosts" {
+  count          = var.egress_firewall_ip == null ? 0 : 1
+  subnet_id      = azurerm_subnet.session_hosts.id
+  route_table_id = azurerm_route_table.session_hosts[0].id
 }

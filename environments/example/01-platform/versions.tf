@@ -76,3 +76,10 @@ provider "azapi" {
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
 }
+
+# The same identity, used only for the ephemeral reads in modules/run-secrets.
+provider "azapi" {
+  alias           = "secrets"
+  subscription_id = var.subscription_id
+  tenant_id       = var.tenant_id
+}

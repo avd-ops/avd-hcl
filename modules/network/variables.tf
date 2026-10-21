@@ -84,7 +84,21 @@ variable "existing_private_dns_zone_ids" {
 }
 
 variable "create_nat_gateway" {
-  description = "Give session hosts outbound internet through a NAT gateway. Set false when a hub firewall handles egress."
+  description = "Give session hosts outbound internet through a NAT gateway. Set false when a hub firewall handles egress, and set egress_firewall_ip."
   type        = bool
   default     = true
+  validation {
+    condition     = var.create_nat_gateway != (var.egress_firewall_ip != null)
+    error_message = "Session hosts need exactly one way out: the NAT gateway, or egress_firewall_ip with create_nat_gateway = false."
+  }
+}
+
+variable "egress_firewall_ip" {
+  description = "Private IP of the hub firewall that session host traffic to the internet goes through. Null keeps the NAT gateway as the way out."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.egress_firewall_ip == null || can(cidrhost("${coalesce(var.egress_firewall_ip, "0.0.0.0")}/32", 0))
+    error_message = "egress_firewall_ip must be an IPv4 address."
+  }
 }

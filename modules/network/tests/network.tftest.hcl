@@ -62,6 +62,7 @@ run "hub_owns_dns_and_egress" {
     hub_vnet_id              = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hub/providers/Microsoft.Network/virtualNetworks/vnet-hub"
     create_private_dns_zones = false
     create_nat_gateway       = false
+    egress_firewall_ip       = "10.0.0.4"
     existing_private_dns_zone_ids = {
       file = "/zones/file"
     }
@@ -70,6 +71,11 @@ run "hub_owns_dns_and_egress" {
   assert {
     condition     = length(azurerm_private_dns_zone.this) == 0 && length(azurerm_nat_gateway.this) == 0
     error_message = "Zones and NAT gateway should be skipped."
+  }
+
+  assert {
+    condition     = one(azurerm_route_table.session_hosts[0].route).next_hop_in_ip_address == "10.0.0.4"
+    error_message = "Without the NAT gateway, session hosts route to the hub firewall."
   }
 
   assert {
@@ -86,4 +92,14 @@ run "remote_gateways_need_a_hub" {
   }
 
   expect_failures = [var.use_remote_gateways]
+}
+
+run "no_way_out_is_rejected" {
+  command = plan
+
+  variables {
+    create_nat_gateway = false
+  }
+
+  expect_failures = [var.create_nat_gateway]
 }

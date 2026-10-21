@@ -20,7 +20,6 @@ variables {
   private_endpoint_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/virtualNetworks/vnet-test/subnets/snet-private-endpoints"
   private_dns_zone_id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net"
   local_admin_username       = "avdadmin"
-  local_admin_password       = "placeholder-only-for-tests"
   log_analytics_workspace_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.OperationalInsights/workspaces/log-test"
 }
 
@@ -38,7 +37,17 @@ run "private_rbac_vault" {
   }
 
   assert {
-    condition     = azapi_resource.local_admin_password.type == "Microsoft.KeyVault/vaults/secrets@2023-07-01"
+    condition     = azapi_resource.local_admin_username.type == "Microsoft.KeyVault/vaults/secrets@2023-07-01"
     error_message = "Secrets go through ARM, so a runner outside the VNet can write them."
   }
+}
+
+run "double_hyphen_is_rejected" {
+  command = plan
+
+  variables {
+    name = "kv-avd--dev"
+  }
+
+  expect_failures = [var.name]
 }

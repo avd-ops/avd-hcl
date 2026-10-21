@@ -176,9 +176,9 @@
       "id": "prefix",
       "phase": "configure",
       "type": "string",
-      "pattern": "^[a-z][a-z0-9-]{1,12}$",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$",
       "question": "Short name prefix for resources?",
-      "help": "2-13 lowercase letters, digits or hyphens, for example avd-dev. Every resource name starts from it.",
+      "help": "2-13 lowercase letters, digits or single hyphens, for example avd-dev. Every resource name starts from it.",
       "default": "avd-{environment}",
       "tfvars": [
         {
@@ -186,7 +186,9 @@
           "path": "prefix"
         }
       ],
-      "form": true
+      "form": true,
+      "min_length": 2,
+      "max_length": 13
     },
     {
       "id": "address_space",
@@ -276,12 +278,34 @@
       "phase": "configure",
       "type": "bool",
       "question": "Give session hosts outbound internet through a NAT gateway?",
-      "help": "New subnets have no default outbound access. Say no only when a hub firewall handles egress.",
+      "help": "New subnets have no default outbound access. Say no only when a hub firewall handles egress, and give its IP next.",
       "default": true,
       "tfvars": [
         {
           "stage": "platform",
           "path": "create_nat_gateway"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "egress_firewall_ip",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){3}$",
+      "question": "Hub firewall IP for outbound traffic?",
+      "help": "Only without the NAT gateway: session host internet traffic gets a default route to this firewall. Peering alone doesn't send it there.",
+      "default": null,
+      "when": {
+        "create_nat_gateway": [
+          false
+        ]
+      },
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "egress_firewall_ip",
+          "omit_empty": true
         }
       ],
       "ask": "advanced"
@@ -401,6 +425,24 @@
       "ask": "advanced"
     },
     {
+      "id": "encryption_at_host",
+      "phase": "configure",
+      "type": "bool",
+      "question": "Encrypt session host temp disks and caches at the host?",
+      "help": "Needs the Microsoft.Compute/EncryptionAtHost feature on the subscription; the plan stops early, with the command to run, if it isn't registered.",
+      "default": true,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "encryption_at_host"
+        }
+      ],
+      "ask": "advanced",
+      "sources": [
+        "https://learn.microsoft.com/azure/virtual-machines/disks-enable-host-based-encryption-portal"
+      ]
+    },
+    {
       "id": "enroll_in_intune",
       "phase": "configure",
       "type": "bool",
@@ -446,6 +488,24 @@
         }
       ],
       "ask": "advanced"
+    },
+    {
+      "id": "grant_avd_power_role",
+      "phase": "configure",
+      "type": "bool",
+      "question": "Grant autoscale its role on this subscription?",
+      "help": "The AVD service principal needs Power On Off Contributor at subscription scope. Only one environment (or the landing zone) per subscription should grant it; say no if one already does.",
+      "default": true,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "grant_avd_power_role"
+        }
+      ],
+      "ask": "advanced",
+      "sources": [
+        "https://learn.microsoft.com/azure/virtual-desktop/autoscale-create-assign-scaling-plan"
+      ]
     }
   ]
 }

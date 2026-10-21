@@ -30,8 +30,9 @@ Terraform variable in a stage. Change a question, default or rule here, never in
 | `type` | `string`, `int`, `bool`, `enum`, `uuid`, `cidr`, `string_list`, `ipv4_list`, `group_list` (names or IDs, looked up in Entra) |
 | `question`, `help` | What every front door shows. Plain language; `help` says why it matters |
 | `choices` | For `enum`: `value`, `label`, and `supported: false` plus `reason` for options the kit can't build yet |
-| `pattern`, `min`, `max`, `min_prefix`, `max_prefix`, `min_items` | Validation, kept in step with the Terraform variable's own validation |
+| `pattern`, `min_length`, `max_length`, `min`, `max`, `min_prefix`, `max_prefix`, `min_items` | Validation, kept in step with the Terraform variable's own validation |
 | `default` | A value, or a template such as `"avd-{environment}"` that uses earlier answers |
+| `when` | Only asked when earlier answers match, e.g. `{"create_nat_gateway": [false]}` |
 | `ask` | `always` (default), `advanced` (only when asked for), or `never` (read from the account) |
 | `source` | `tenant` or `subscription`: read from `ARM_*` or `az account show`, never asked or saved |
 | `tfvars` | Where the value lands: `stage`, a dotted `path` whose first part is a variable of that stage's root, and optional `render` (`list`) or `omit_empty` |

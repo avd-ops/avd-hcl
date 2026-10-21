@@ -16,7 +16,7 @@ The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is 
 
 | Path | What |
 |---|---|
-| `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts. Each has `tests/` for `terraform test` |
+| `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts, and run-secrets for the values that never touch state. Each has `tests/` for `terraform test`, except run-secrets, tested through the root |
 | `environments/example/01-platform/` | The platform root that wires the modules together; copy it per environment |
 | `schema/parameters.json` | The one list of deployment parameters behind every front door |
 | `scripts/schema/` | The schema check CI runs |
@@ -27,7 +27,7 @@ From Cloud Shell, with no Azure changes (mock providers only):
 
 ```bash
 git clone https://github.com/nickprignano/avd-hcl.git && cd avd-hcl
-for d in modules/*/ environments/example/01-platform/; do (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
+for d in modules/*/ environments/example/01-platform/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
 python3 scripts/schema/check.py
 ```
 

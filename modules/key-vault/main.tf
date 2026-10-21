@@ -2,7 +2,8 @@
 # CREDITS.md and NOTICE. Changes: written in Terraform, and the secrets go through ARM (azapi).
 #
 # Holds the session hosts' break-glass local admin credential, so nobody has to remember it
-# (avd-landing-zone lesson 0002). RBAC-authorized, purge-protected, reachable only over its
+# (avd-landing-zone lesson 0002): the username here, and one password secret per host, written
+# by modules/session-hosts when it creates the host. RBAC-authorized, purge-protected, reachable only over its
 # private endpoint. The secrets are written through the management plane (ARM), not the vault's
 # data plane: a runner outside the VNet can't reach a vault with public access disabled, but ARM
 # can still create secrets in it.
@@ -55,27 +56,6 @@ resource "azapi_resource" "local_admin_username" {
     properties = {
       value = var.local_admin_username
     }
-  }
-}
-
-# sensitive_body is write-only: the password is not kept in this resource's state. Bump
-# local_admin_password_version to write a new value.
-resource "azapi_resource" "local_admin_password" {
-  type      = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
-  name      = "sessionhost-localadmin-password"
-  parent_id = azurerm_key_vault.this.id
-  body = {
-    properties = {
-      contentType = "password"
-    }
-  }
-  sensitive_body = {
-    properties = {
-      value = var.local_admin_password
-    }
-  }
-  sensitive_body_version = {
-    "properties.value" = var.local_admin_password_version
   }
 }
 

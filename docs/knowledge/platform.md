@@ -20,7 +20,8 @@ has not run against Azure yet (that needs a written estimate and the owner's exa
 | `key-vault` | RBAC vault with purge protection and a private endpoint, holding the break-glass credential | avd-landing-zone `keyVault.bicep` |
 | `monitoring` | Log Analytics (Entra auth only) and the AVD Insights data collection rule | avd-landing-zone `monitoring.bicep` |
 | `control-plane` | Host pool, registration token, desktop app group, workspace, user assignment, scaling plan, diagnostics | avd-landing-zone `controlPlane.bicep` |
-| `session-hosts` | Trusted Launch VMs, Entra join (optional Intune), AMA, guest configuration, the two run commands, sign-in roles | avd-landing-zone `sessionHosts.bicep` and `scripts/sessionhost/` |
+| `session-hosts` | Trusted Launch VMs, a break-glass secret per host, Entra join (optional Intune), AMA, guest configuration, the two run commands, sign-in roles | avd-landing-zone `sessionHosts.bicep` and `scripts/sessionhost/` |
+| `run-secrets` | The run's ephemeral values: a new break-glass password and the host pool's registration token | New |
 
 The parameter schema (`schema/parameters.json`) answers the root's variables; `scripts/schema/check.py`
 fails CI when a parameter points at a variable that doesn't exist, or a required variable has no
@@ -35,10 +36,11 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
 - **SMB channel encryption allows AES-128-GCM and AES-256-GCM** (landing zone lesson 0028):
   AES-256-GCM alone denies Entra Kerberos sign-ins from cloud-only users. nerdio-hcl's module sets
   AES-256-GCM only.
-- **The admin password is generated and kept in Key Vault** (lesson 0002), and hosts ignore later
-  password changes, because Azure applies it only at creation.
-- **The registration run command ignores a new token** (lesson 0026): rewriting it on every apply
-  fails on a deallocated host.
+- **The admin password is generated and kept in Key Vault** (lesson 0002), one secret per host,
+  written once, because Azure applies it only at creation.
+- **Extensions and run commands ignore later changes** (lesson 0026): rewriting them fails on a
+  host autoscale has deallocated. A new token, tag or FSLogix setting reaches hosts by rebuilding
+  them (host rotation, a later phase).
 - **Key Vault and Log Analytics soft delete** (lessons 0022 and 0023): the provider recovers a
   soft-deleted vault and deletes the workspace permanently on destroy.
 
@@ -48,12 +50,43 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   lower scope, such as a resource group, "prevents autoscale from working properly"
   ([Learn](https://learn.microsoft.com/azure/virtual-desktop/autoscale-create-assign-scaling-plan#assign-permissions-to-the-azure-virtual-desktop-service-principal)).
   The root grants it there; the landing zone grants it on its two resource groups.
+- **No secret in state** (guardrail 5). azurerm 5.10 has write-only attributes for a few
+  resources, but not for a VM's `admin_password`, a run command's protected parameters or the
+  host pool registration token, which `azurerm_virtual_desktop_host_pool_registration_info` keeps
+  in state. So:
+  - the password is an ephemeral `random_password`;
+  - the token's expiry is set on the host pool with `azapi_update_resource`, and the token is
+    read with the ephemeral `azapi_resource_action` `retrieveRegistrationToken`;
+  - the VM, the per-host password secret and the registration run command are `azapi_resource`s
+    whose `sensitive_body` is write-only, with a fixed `sensitive_body_version` so each is written
+    once.
 - **A Key Vault with public access off can't be written through its data plane** from a runner
-  outside the VNet. `azurerm_key_vault_secret` uses the data plane, so the secrets go through ARM
-  with `azapi_resource` (`Microsoft.KeyVault/vaults/secrets`) instead. Its `sensitive_body` is
-  write-only, so that resource keeps no password in state. The VM's `admin_password` has no
-  write-only form in azurerm 5.10, so the password is still in state: the backend must be private
-  and Entra-authenticated.
+  outside the VNet. `azurerm_key_vault_secret` uses the data plane, so secrets go through ARM
+  (`Microsoft.KeyVault/vaults/secrets`) with azapi.
+- **Run commands through ARM fail the apply when their script fails**, with `asyncExecution =
+  false` and `treatFailureAsDeploymentFailure = true`, the same as the landing zone's Bicep.
+  azurerm's run command resource has no such setting.
+- **A host keeps the zone it was created in.** Zones are handed out round robin, so editing
+  `availability_zones` would move existing hosts and rebuild them; the VM ignores later zone
+  changes, so the edit applies to new hosts only.
+- **Session hosts need exactly one way out.** The subnets have no default outbound access, and
+  peering alone doesn't send internet traffic through a hub, so without the NAT gateway the
+  network module routes 0.0.0.0/0 to `egress_firewall_ip`. A plan with neither fails.
+- **The NSG's outbound allow rules restrict nothing** while the default AllowInternetOutBound rule
+  applies. They name the flows; locking egress down is the hub firewall's job or later hardening.
+- **Power On Off Contributor is one assignment per subscription.** A second environment in the
+  same subscription sets `grant_avd_power_role = false`, or the apply fails on the existing
+  assignment and a destroy would remove it from every host pool.
+- **Encryption at host needs a subscription feature.** The root reads
+  `Microsoft.Compute/EncryptionAtHost` at plan time and stops before creating anything when it
+  isn't registered, with the commands to fix it.
+- **Mock providers can't hold ephemeral resources** ("No ephemeral resource types in mock
+  providers"), even with `override_module`. The ephemeral reads use their own provider alias
+  (`azapi.secrets`), which the root test configures as a real provider with placeholder settings
+  and never calls, because the test plans zero hosts and skips the read. The random provider runs
+  unmocked; it works offline.
+- **Azure rejects Key Vault names with two hyphens in a row**, so the prefix allows single hyphens
+  only.
 - **`count` can't depend on an ID from the same apply.** `count = var.workspace_id == null ? 0 : 1`
   fails at plan when the workspace is created in the same run; the root test caught it. The
   modules take the workspace ID as required instead.
@@ -61,5 +94,3 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   `mock_resource` defaults for IDs that other resources validate), not on computed attributes.
 - **azurerm validates resource ID shapes at plan**, so test inputs need full, well-formed
   placeholder IDs, not short strings.
-- **Run commands don't fail the apply on their own.** Each run command has a postcondition on the
-  instance view's exit code, so a script that fails stops the apply instead of passing silently.

@@ -22,6 +22,7 @@ mock_provider "azurerm" {
 }
 
 mock_provider "time" {}
+mock_provider "azapi" {}
 
 variables {
   location                   = "eastus2"
@@ -60,6 +61,15 @@ run "pooled_desktop" {
   assert {
     condition     = length(azurerm_monitor_diagnostic_setting.this) == 4
     error_message = "Host pool, app group, workspace and scaling plan all send logs."
+  }
+}
+
+run "token_expiry_set_through_arm" {
+  command = plan
+
+  assert {
+    condition     = azapi_update_resource.registration.body.properties.registrationInfo.registrationTokenOperation == "Update"
+    error_message = "The token is issued through ARM so it never lands in state."
   }
 }
 

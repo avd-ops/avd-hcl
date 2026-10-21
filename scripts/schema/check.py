@@ -58,6 +58,8 @@ def check_default(p):
             errs.append("default is not a supported choice")
     if "pattern" in p and isinstance(d, str) and not re.fullmatch(p["pattern"], d):
         errs.append("default does not match pattern")
+    if isinstance(d, str) and (len(d) < p.get("min_length", 0) or len(d) > p.get("max_length", len(d))):
+        errs.append("default length is outside min_length/max_length")
     return errs
 
 
@@ -101,6 +103,9 @@ def check(schema, root=ROOT):
                     errs.append(f"{where}: unsupported choice {c.get('value')} needs a reason")
             if not p.get("choices"):
                 errs.append(f"{where}: enum needs choices")
+        for dep in p.get("when", {}):
+            if dep not in seen:
+                errs.append(f"{where}: when refers to {dep}, which is not an earlier parameter")
         if p.get("ask", "always") not in {"always", "advanced", "never"}:
             errs.append(f"{where}: ask must be always, advanced or never")
         if p.get("ask") == "never" and "source" not in p and "default" not in p:

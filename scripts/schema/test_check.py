@@ -31,6 +31,14 @@ class SchemaTest(unittest.TestCase):
         self.param("prefix")["default"] = "Not_Valid"
         self.assertTrue(any("does not match pattern" in e for e in check.check(self.schema)))
 
+    def test_double_hyphen_prefix_fails_the_pattern(self):
+        self.param("prefix")["default"] = "avd--dev"
+        self.assertTrue(any("does not match pattern" in e for e in check.check(self.schema)))
+
+    def test_when_must_point_back(self):
+        self.param("egress_firewall_ip")["when"] = {"no_such_answer": [True]}
+        self.assertTrue(any("not an earlier parameter" in e for e in check.check(self.schema)))
+
     def test_template_default_is_not_checked(self):
         self.assertEqual(check.check_default({"type": "string", "pattern": "^[a-z]+$", "default": "avd-{environment}"}), [])
 

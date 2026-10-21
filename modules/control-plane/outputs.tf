@@ -18,8 +18,7 @@ output "workspace_id" {
   value       = azurerm_virtual_desktop_workspace.this.id
 }
 
-output "registration_token" {
-  description = "Host pool registration token, passed to new session hosts as a protected run command parameter."
-  value       = azurerm_virtual_desktop_host_pool_registration_info.this.token
-  sensitive   = true
+output "registration_host_pool_id" {
+  description = "Host pool ID, available once the registration token's expiry is set. Session hosts read the token from it ephemerally."
+  value       = azapi_update_resource.registration.resource_id
 }

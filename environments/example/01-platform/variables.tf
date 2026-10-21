@@ -30,8 +30,8 @@ variable "prefix" {
   description = "Naming prefix: 2-13 lowercase letters, digits or hyphens, for example avd-dev."
   type        = string
   validation {
-    condition     = can(regex("^[a-z][a-z0-9-]{1,12}$", var.prefix)) && !endswith(var.prefix, "-")
-    error_message = "prefix must be 2-13 lowercase letters, digits or hyphens, starting with a letter and not ending with a hyphen."
+    condition     = can(regex("^[a-z][a-z0-9]*(-[a-z0-9]+)*$", var.prefix)) && length(var.prefix) >= 2 && length(var.prefix) <= 13
+    error_message = "prefix must be 2-13 lowercase letters, digits or single hyphens, starting with a letter and not ending with a hyphen."
   }
 }
 
@@ -79,6 +79,18 @@ variable "hub_vnet_id" {
 
 variable "create_nat_gateway" {
   description = "Outbound internet through a NAT gateway. Turn off when a hub firewall handles egress."
+  type        = bool
+  default     = true
+}
+
+variable "egress_firewall_ip" {
+  description = "Hub firewall IP that session host internet traffic routes to, with create_nat_gateway = false."
+  type        = string
+  default     = null
+}
+
+variable "grant_avd_power_role" {
+  description = "Grant the AVD service principal Power On Off Contributor on the subscription. Only one environment (or the landing zone) per subscription should; set false in the others."
   type        = bool
   default     = true
 }

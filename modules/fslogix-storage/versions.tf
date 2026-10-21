@@ -1,3 +1,5 @@
+# Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), modules/fslogix-storage; see CREDITS.md and NOTICE.
+
 terraform {
   required_version = ">= 1.11"
   required_providers {
