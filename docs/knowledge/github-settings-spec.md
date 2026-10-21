@@ -65,6 +65,12 @@ github/
   conventions.md             the settings table in section 5, with where each one comes from
 ```
 
+- **One owner per setting.** GitHub environments (the kit's `<env>-plan` and `<env>-apply`, their
+  branch policies, reviewers and environment secrets) belong to the kit's deploy pipeline
+  (`environments/example/00-pipeline`, port plan phase 2), never to `github/`. `github/` owns
+  everything else in section 4, and the pipeline module touches none of it. Required reviewers on
+  environments in a private repository need GitHub Enterprise (environments and branch policies
+  need Pro), which matters for that pipeline while this repo is private.
 - `github/` never shares state, variables or providers with `environments/`. The kit's roots
   never reference `github/`, and `github/` never reads the kit's state.
 - Provider: `integrations/github`, pinned to the release current at build time (`~> 6.x`), and
