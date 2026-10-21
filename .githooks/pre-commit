@@ -1,5 +1,5 @@
 #!/bin/sh
-# AVD Lab Kit — pre-commit secret scan. See CONTRIBUTING.md.
+# avd-hcl: pre-commit secret scan. See docs/guardrails.md.
 #
 # This is the *primary* leak-prevention control: it stops a real subscription
 # ID, tenant ID, or key from entering a commit at all. The CI job and GitHub's
@@ -20,7 +20,7 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   echo "  Install it:  winget install gitleaks"
   echo "               (or) https://github.com/gitleaks/gitleaks/releases"
   echo ""
-  echo "This hook fails closed on purpose (see CONTRIBUTING.md)."
+  echo "This hook fails closed on purpose (docs/guardrails.md)."
   echo "To bypass for a single commit you know is clean:  git commit --no-verify"
   echo "----------------------------------------------------------------------"
   exit 1
@@ -32,7 +32,7 @@ if ! gitleaks protect --staged --redact --verbose; then
   echo "----------------------------------------------------------------------"
   echo "BLOCKED: gitleaks found a potential secret in your staged changes."
   echo ""
-  echo "Do NOT just delete the line and re-commit — if it was ever committed,"
+  echo "Do NOT just delete the line and re-commit: if it was ever committed,"
   echo "it stays in history. Rotate the credential, then scrub it."
   echo "----------------------------------------------------------------------"
   exit 1

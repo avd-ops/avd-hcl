@@ -1,15 +1,11 @@
 # Normalize to LF in the repo; let git decide the working-tree ending by default.
 * text=auto
 
-# These MUST stay LF in the working tree. A CRLF shebang makes the hook fail
-# with "bad interpreter", and CI runs the workflow + hook on Linux.
+# These must stay LF in the working tree: a CRLF shebang fails with "bad interpreter",
+# and CI runs on Linux.
 .githooks/pre-commit    text eol=lf
 *.sh                    text eol=lf
 *.yml                   text eol=lf
 *.yaml                  text eol=lf
-
-# PowerShell and Bicep are fine either way; keep them CRLF on Windows.
-*.ps1                   text
-*.psm1                  text
-*.bicep                 text
-*.bicepparam            text
+*.tf                    text eol=lf
+*.hcl                   text eol=lf
