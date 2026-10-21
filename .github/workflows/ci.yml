@@ -1,3 +1,4 @@
+# Adapted from this repository's earlier lab kit (same author, MIT, commit de2b9bc); see CREDITS.md.
 name: CI
 
 on:
@@ -12,7 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  # Terraform formatting and validation. Skips cleanly until the first .tf file lands (phase 1).
+  # Terraform formatting for now; validate, tflint, terraform test and packer fmt join in phase 1
+  # with the first modules. Skips cleanly until the first .tf file lands.
   terraform:
     name: Terraform fmt
     runs-on: ubuntu-latest
@@ -37,19 +39,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: No Nerdio in the path, no tracked tfvars or state
+      - name: No Nerdio in the path, no tracked tfvars or state, no real IDs or emails
         shell: bash
         run: |
           set -uo pipefail
           fail=0
-          if git grep -nE 'nerdio/nme|registry\.terraform\.io/nerdio' -- '*.tf' '*.hcl'; then
-            echo "::error::The nerdio/nme provider is not allowed here (CLAUDE.md)."
+          # Code only: docs may name Nerdio as prior art. This workflow is excluded because it holds the pattern.
+          if git grep -niE 'nerdio' -- '*.tf' '*.tf.json' '*.hcl' '*.sh' '*.ps1' '*.psm1' '*.py' '*.yml' '*.yaml' ':!.github/workflows/ci.yml'; then
+            echo "::error::No Nerdio provider, API or tool in the kit's code (CLAUDE.md)."
             fail=1
           fi
-          tracked=$(git ls-files | grep -E '(^|/)terraform\.tfvars$|\.auto\.tfvars\.json$|\.tfstate(\.backup)?$|\.pkrvars\.hcl$|(^|/)\.terraform/' || true)
+          tracked=$(git ls-files | grep -E '(^|/)terraform\.tfvars$|\.auto\.tfvars\.json$|\.tfstate(\.backup)?$|\.pkrvars\.hcl$|(^|/)\.terraform/' | grep -vE '(^|/)example\.pkrvars\.hcl$' || true)
           if [ -n "$tracked" ]; then
             echo "$tracked"
             echo "::error::tfvars, state and .terraform/ must never be tracked (guardrail 4)."
+            fail=1
+          fi
+          # Bare GUIDs: only the all-zero placeholder is allowed. Public Microsoft IDs get added here with a comment.
+          if git grep -nIiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' -- . ':!.github/workflows/ci.yml' | grep -viE '00000000-0000-0000-0000-0000000000[0-9a-f]{2}'; then
+            echo "::error::A GUID that isn't a placeholder is tracked (guardrail 4)."
+            fail=1
+          fi
+          # Emails: only example domains.
+          if git grep -nIE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . ':!.github/workflows/ci.yml' | grep -vE '@(contoso\.com|example\.(com|org)|anthropic\.com)|noreply@'; then
+            echo "::error::A real-looking email address is tracked (guardrail 4)."
             fail=1
           fi
           exit $fail
@@ -66,7 +79,7 @@ jobs:
           fetch-depth: 0 # full history; a shallow clone would silently scan less
       - name: Install gitleaks
         env:
-          GITLEAKS_VERSION: 8.30.1 # matches .githooks/pre-commit's expectation
+          GITLEAKS_VERSION: 8.30.1 # same version the hook's install instructions name
         run: |
           set -euo pipefail
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \

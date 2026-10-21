@@ -39,6 +39,10 @@ either keep a header naming their source, and everything taken is listed in CRED
   image pipeline with WDOT, rotation, auto shutdown, readiness) and the lessons from its real
   runs are the reference this kit follows. avd-landing-zone does not depend on this kit.
 
+- This repository's earlier lab kit (commit de2b9bc), Copyright (c) 2026 Nick Prignano,
+  released under the MIT License (same text as above). The pre-commit secret-scan hook and the
+  CI secret-scan job started there.
+
 Third-party components
 ----------------------
 

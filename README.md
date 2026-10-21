@@ -34,6 +34,18 @@ Full credits: [CREDITS.md](CREDITS.md) and [NOTICE](NOTICE).
 
 Details: [docs/guardrails.md](docs/guardrails.md).
 
+## Contributing
+
+Turn on the secret-scanning pre-commit hook once per clone. It fails closed if gitleaks is
+missing and prints how to install it in Cloud Shell:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+CI runs the same scan over full history, plus the guards in `.github/workflows/ci.yml`. Every
+reuse gets a row in [CREDITS.md](CREDITS.md).
+
 ## License
 
 [Apache License 2.0](LICENSE). Components the kit downloads or calls keep their own terms; see

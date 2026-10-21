@@ -3,7 +3,9 @@ terraform.tfvars
 *.auto.tfvars.json
 *.pkrvars.hcl
 !example.pkrvars.hcl
-backend.tf
+# Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
+backend.hcl
+*.backend.hcl
 *.tfplan
 tfplan
 

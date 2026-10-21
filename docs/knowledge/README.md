@@ -17,5 +17,5 @@ page, not a copy.
   questions and the phased order.
 - [decisions/](decisions/): decision records in MADR 4 format.
 
-The family's KB tooling (index generation, validation, prior-art and freshness checks) is not
-installed yet; it arrives with the repo going public.
+avd-hcl is a standalone project, not part of the avd-ops family. KB tooling (index generation,
+validation, prior-art and freshness checks) may be added later; it isn't installed yet.
