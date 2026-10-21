@@ -269,15 +269,19 @@ editions knowing they are source-available (decision 0004); OpenTofu and OpenBao
 
 1. **This spec** (PR, docs only). You approve or change it.
 2. **Code PR, offline:** `github/` module and root, import blocks, tests, the drift workflow
-   (inert until step 4), `conventions.md`, CI. No credential, nothing applied.
-3. **First plan, read-only:** you create a read-only fine-grained token (same as section 8's apply
-   token but read permissions only), run one Cloud Shell block that runs `terraform plan` with
-   local state, and paste the plan's text here. Nothing changes.
-4. **Bootstrap**, after a written estimate and your go, once the kit's Vault server exists (Q13):
-   the state container, both Apps, the Vault keys, roles and policies, the repository variables.
-   The first drift run is started by hand and should report what step 5 left (nothing).
-5. **Apply**, on your go and only after PR #10 has merged (the required check names come from
-   it), from Cloud Shell with the write token; the drift run after it must be clean. Then the follow-up PR adding import blocks for the new objects.
+   (inert until step 5), `conventions.md`, CI. No credential, nothing applied.
+3. **First plan, read-only:** you create a read-only fine-grained token (the permissions of the
+   reader App), run one Cloud Shell block that runs `terraform plan` with local state, and paste
+   the plan's text here. Nothing changes.
+4. **First apply**, on your go and only after PR #10 has merged (the required check names come
+   from it), from Cloud Shell with a one-day fine-grained write token (the writer App's
+   permissions), revoked after; the Vault server doesn't exist yet. Local state moves to the
+   state container in the same step. Then the follow-up PR adding import blocks for the new
+   objects.
+5. **Vault and the drift check**, after a written estimate and your go, once the kit's Vault
+   server exists (Q13): both Apps, the Vault keys, roles and policies, the repository variables.
+   The first drift run is started by hand and must be clean. From then on, applies use the
+   writer App through Vault and no token is created by hand.
 
 ## 12. Open questions for you
 
