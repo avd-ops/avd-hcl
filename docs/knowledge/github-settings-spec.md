@@ -26,8 +26,8 @@ Azure resource or credential changes until the owner says yes to each step in se
   (section 9).
 - Applying is always you, in Cloud Shell, with a short-lived write token you create for that run.
   That is an exception to guardrail 6 and ai-brain 0016 step 3, flagged in Q5.
-- The same module and the same documented settings serve a second repository of yours (section 7),
-  each with its own state.
+- The conventions are written down once (`github/conventions.md`) so your other HCL repository,
+  nerdio-hcl, can be kept the same from its own project (section 7).
 
 ## 2. What exists today (read 2026-10-21, read-only)
 
@@ -59,7 +59,6 @@ github/
                              use_oidc on (Reader can't list storage keys); values from -backend-config
     versions.tf              integrations/github pinned; provider "github" { owner = "nickprignano" },
                              token from GITHUB_TOKEN in the environment
-  repos/<second-repo>/       later, only after you name it (section 7)
   bootstrap/                 the small Azure piece the drift check needs (section 8), local state, then migrated
   scripts/app-token.py       mints a read-only installation token from a Key Vault-signed JWT
   conventions.md             the settings table in section 5, with where each one comes from
@@ -137,36 +136,22 @@ Anything marked **proposed here** has no source in those decisions and is for yo
 - To check on the first plan, not assumed: whether the API rejects squash commit message
   settings while squash merges are off (if so, the module leaves them unset).
 
-## 7. Two repositories, one set of settings
+## 7. Same settings as nerdio-hcl
 
-- **One module, one variable set.** `github/modules/repo-settings` carries the conventions in
-  section 5 as defaults. Each repository is a root under `github/repos/` that passes only what
-  must differ: its name, its required checks (each repo runs different CI), its extra labels, and
-  whether it is public. `conventions.md` lists each default with its source, so a change to a
-  convention is one PR here, and the per-repo differences are visible in two short files.
-- **Which repository is the second one?** Not stated, so not guessed. The likely candidates and how
-  they differ from avd-hcl today, for you to decide:
+The second repository is nerdio-hcl (owner, 2026-10-21). It is handled in its own project, so this
+spec manages avd-hcl only and nothing here reads or writes nerdio-hcl.
 
-| | avd-hcl | nerdio-hcl | ai-brain |
-|---|---|---|---|
-| Visibility | private | public | public |
-| `main` protected | no | no (its own `modules/github-repo` defines a ruleset, but none shows on `main`) | not readable from this session |
-| Auto-merge | none | none | `kb-auto-merge` on, paths `docs/**`, `README.md`, `llms.txt` |
-| Required checks it would get | `Terraform`, `Parameter schema`, `Guard`, `gitleaks` | its `validate` jobs and `gitleaks` (names to confirm) | `auto-merge`, `kb-validate`, `gitleaks` (`secrets`), `kb-capture` |
-| Secret scanning, push protection | not available while private | available | available |
-| Extra labels | none | `kb-*` labels its own module creates | `kb-*` labels |
-| CODEOWNERS | none | none | yes (directives file) |
-
-- Flagged for you: **auto-merge** (on in ai-brain, off here), **secret scanning** (public only),
-  **required checks** (always per repo), and nerdio-hcl's **unenforced ruleset**. If the second
-  repo is nerdio-hcl, its own `modules/github-repo` (applied by its bootstrap) would also manage
-  labels, the workflow token and a ruleset on the same repo: two owners of one setting fight, so
-  one of them has to step back (Q3). Stepping back means changing nerdio-hcl's deploy-pipeline
-  bootstrap root (`environments/example/00-pipeline/main.tf` applies that module), and its
-  `actions_can_open_pull_requests = true` default (needed by its `kb-feedback` workflow) differs
-  from this spec's "Actions can't approve PRs".
-- A public repository never names avd-hcl, so the second repository's root lives here, in
-  `github/repos/<name>/`, not in that repository.
+- **The documented variable set is the shared part.** `github/conventions.md` lists every setting
+  in section 5 with its source, and the module carries them as defaults. nerdio-hcl's project can
+  match them with its own `modules/github-repo` (which nerdio-hcl's bootstrap already applies to
+  that repo) or by reusing this module; that choice is theirs.
+- **Differences seen today, for that project to decide** (read-only, 2026-10-21): nerdio-hcl is
+  public, so secret scanning and push protection are available there and not here; its own module
+  defines a ruleset, but none shows on its `main`; its `actions_can_open_pull_requests = true`
+  (its `kb-feedback` workflow needs it) differs from section 5's "Actions can't approve PRs"; its
+  required checks are its own CI job names.
+- One repository's settings never have two owners: whatever manages nerdio-hcl's settings stays
+  in that repository's project.
 
 ## 8. Credentials (no long-lived token anywhere, per 0016)
 
@@ -174,8 +159,7 @@ Anything marked **proposed here** has no source in those decisions and is for yo
 
 - Why an App at all: the workflow's own `GITHUB_TOKEN` has no `administration` scope, so it can't
   read rulesets' enforcement details, security settings or workflow permissions.
-- A private GitHub App, "avd-hcl settings reader", installed on this repository only (and the
-  second repository later). Repository permissions: **Administration: read** (merge settings,
+- A private GitHub App, "avd-hcl settings reader", installed on this repository only. Repository permissions: **Administration: read** (merge settings,
   rulesets, security settings, Dependabot, workflow permissions), **Issues: read** (labels),
   **Metadata: read** (required). Nothing else: no write permission, no webhook.
 - Its private key is imported into a Key Vault as a **non-exportable key with only the `sign`
@@ -294,7 +278,6 @@ already Terraform; on licensing alone OpenTofu wins.
    step 3.
 5. **Apply**, on your go and only after PR #10 has merged (the required check names come from
    it), from Cloud Shell with the write token; the drift run after it must be clean. Then the follow-up PR adding import blocks for the new objects.
-6. **Second repository**, once you name it (Q3).
 
 ## 12. Open questions for you
 
@@ -304,8 +287,7 @@ Collected in the PR and the thread reply; numbered here so answers can refer to 
   a repo-wide decision record?
 - **Q2.** Is your account on GitHub Pro? Rulesets on a private personal repo need it (the drift
   check no longer does). Without Pro, the ruleset only takes effect once the repo is public.
-- **Q3.** Which is the second repository, and if it's nerdio-hcl, does its own
-  `modules/github-repo` step back for that repo?
+- **Q3.** Answered: the second repository is nerdio-hcl, handled in its own project (section 7).
 - **Q4.** OK that the read-only drift check runs with no reviewer, pinned to `main` by its OIDC
   subject instead of a GitHub environment?
 - **Q5.** Apply with a one-day fine-grained token you type in Cloud Shell (simple; an exception to
@@ -339,4 +321,6 @@ ordering diffs handled before apply; backend uses Entra auth; the plan and issue
 separate jobs with the issue step always running, deduplicated, and honest about the labels it
 could write; OIDC pinned to `main` by subject, so no environment and no Pro dependency for the
 check; the key hand-off avoids the Cloud Shell file share; the apply token is flagged as an
-exception to guardrail 6 and 0016; nerdio-hcl's conflict named precisely; Q9 to Q12 added.
+exception to guardrail 6 and 0016; nerdio-hcl's conflict named precisely; Q9 to Q12 added. Later the same day the owner named
+nerdio-hcl as the second repository and moved it to its own project, so section 7 shrank to the
+shared settings table.
