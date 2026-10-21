@@ -9,7 +9,7 @@ last_reviewed: 2026-10-21
 # GitHub settings as code
 
 **Status: proposed, nothing applied.** This is a spec for the owner to approve. No GitHub setting,
-Azure resource or credential changes until the owner says yes to each step in section 9.
+Azure resource or credential changes until the owner says yes to each step in section 11.
 
 ## 1. What changes for you
 
