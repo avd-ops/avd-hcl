@@ -1,0 +1,10 @@
+# Microsoft's public, well-known IDs, the same in every tenant. The Guard allows a GUID only if it
+# is a 00000000-...-0000000000xx placeholder or listed here, each with a comment and a source.
+
+# Azure Virtual Desktop service principal application ID
+# https://learn.microsoft.com/azure/virtual-desktop/service-principal-assign-roles
+9cdead84-a844-4324-93f2-b2e6bb768d07
+
+# Intune MDM application ID, passed as mdmId to the AADLoginForWindows extension
+# https://learn.microsoft.com/azure/virtual-desktop/azure-ad-joined-session-hosts
+0000000a-0000-0000-c000-000000000000

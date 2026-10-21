@@ -13,25 +13,48 @@ permissions:
   contents: read
 
 jobs:
-  # Terraform formatting for now; validate, tflint, terraform test and packer fmt join in phase 1
-  # with the first modules. Skips cleanly until the first .tf file lands.
+  # Formatting, then validate and the offline tests (mock providers, no Azure) in every module
+  # and root. tflint and packer fmt join with the image pipeline.
   terraform:
-    name: Terraform fmt
+    name: Terraform
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.11.4
+          terraform_version: 1.16.6 # the version the tests were written against
+          terraform_wrapper: false
       - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+      - name: Validate and test
         shell: bash
         run: |
           set -euo pipefail
-          if ! git ls-files '*.tf' '*.tfvars' '*.tftest.hcl' | grep -q .; then
-            echo "No Terraform files yet; skipping."
-            exit 0
-          fi
-          terraform fmt -check -recursive -diff
+          fail=0
+          for dir in modules/*/ environments/*/*/; do
+            # A module with no tests of its own (modules/run-secrets) is validated through the roots.
+            if [ ! -d "$dir/tests" ]; then echo "$dir: no tests, checked through the roots"; continue; fi
+            echo "::group::$dir"
+            if ! (cd "$dir" && terraform init -backend=false -input=false -no-color >/dev/null && terraform validate -no-color && terraform test -no-color); then
+              echo "::error::$dir failed validate or test"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $fail
+
+  schema:
+    name: Parameter schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check the schema against the roots
+        run: python3 scripts/schema/check.py
+      - name: Unit tests
+        run: python3 -m unittest discover -s scripts/schema
 
   # Guards for the rules in docs/guardrails.md that a machine can check.
   guard:
@@ -44,8 +67,10 @@ jobs:
         run: |
           set -uo pipefail
           fail=0
-          # Code only: docs may name Nerdio as prior art. This workflow is excluded because it holds the pattern.
-          if git grep -niE 'nerdio' -- '*.tf' '*.tf.json' '*.hcl' '*.sh' '*.ps1' '*.psm1' '*.py' '*.yml' '*.yaml' ':!.github/workflows/ci.yml'; then
+          # Code only: docs may name Nerdio as prior art, and a file adapted from nerdio-hcl names it in
+          # its credit header (decision 0002). This workflow is excluded because it holds the pattern.
+          if git grep -niE 'nerdio' -- '*.tf' '*.tf.json' '*.hcl' '*.sh' '*.ps1' '*.psm1' '*.py' '*.yml' '*.yaml' ':!.github/workflows/ci.yml' \
+            | grep -vE '^[^:]+:[0-9]+:(# )?(Adapted from|From) nerdio-hcl \(Apache-2\.0, commit [0-9a-f]+\)'; then
             echo "::error::No Nerdio provider, API or tool in the kit's code (CLAUDE.md)."
             fail=1
           fi
@@ -55,8 +80,11 @@ jobs:
             echo "::error::tfvars, state and .terraform/ must never be tracked (guardrail 4)."
             fail=1
           fi
-          # Bare GUIDs: only the all-zero placeholder is allowed. Public Microsoft IDs get added here with a comment.
-          if git grep -nIiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' -- . ':!.github/workflows/ci.yml' | grep -viE '00000000-0000-0000-0000-0000000000[0-9a-f]{2}'; then
+          # Bare GUIDs: only the 00000000-...-0000000000xx placeholders and Microsoft's public IDs in
+          # .github/public-ids.txt (each with a comment and a source).
+          public=$(grep -vE '^\s*(#|$)' .github/public-ids.txt | paste -sd'|' -)
+          if git grep -nIiE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' -- . ':!.github/workflows/ci.yml' ':!.github/public-ids.txt' \
+            | grep -viE '00000000-0000-0000-0000-0000000000[0-9a-f]{2}' | grep -viE "${public:-^$}"; then
             echo "::error::A GUID that isn't a placeholder is tracked (guardrail 4)."
             fail=1
           fi
