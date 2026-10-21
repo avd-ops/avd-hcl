@@ -9,7 +9,7 @@ last_reviewed: 2026-10-21
 # Port plan: native AVD with the HashiCorp stack
 
 The plan for this kit: the approach of [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl)
-(Apache-2.0, read at `75f59bc`) ported to Terraform, Packer and Vault that deploy and operate
+(Apache-2.0, read at `75f59bc`) ported to Terraform and Packer (decision 0004: no Vault server) that deploy and operate
 Azure Virtual Desktop directly, with no Nerdio Manager in the path, following the estate design of
 [avd-landing-zone](https://github.com/avd-ops/avd-landing-zone) (MIT). The same plan was first
 recorded in the AVD family's knowledge base ([port plan](https://github.com/avd-ops/avd-second-brain/blob/main/docs/knowledge/landing-zone/terraform-port-plan.md),
@@ -114,6 +114,7 @@ The prior-art check of 2026-10-21 (AVD family KB's `kb-prior-art` workflow) foun
    separate from the AVD repos. The earlier Bicep lab kit in this repo was removed (it stays in
    git history at `de2b9bc`; its useful parts were already ported to avd-landing-zone). Scope:
    Terraform, Packer and Vault, plus Ansible only if a decision record shows it earns its place.
+   Later the same day: no Vault server; Key Vault holds secrets (decision 0004).
 2. **How does it relate to the landing zone?** Separate repo with shared contracts
    (recommended), shared parameter schema, or parallel option (section 4).
 3. **Scope of the first build:** pooled, Entra-joined, one host pool, FSLogix on Azure Files,

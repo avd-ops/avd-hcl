@@ -2,8 +2,9 @@
 
 # CLAUDE.md
 
-avd-hcl: native Azure Virtual Desktop deployed and operated with Terraform, Packer and Vault
-(Ansible only if a decision record shows it earns its place). It ports the approach of
+avd-hcl: native Azure Virtual Desktop deployed and operated with Terraform and Packer community
+editions, secrets in Azure Key Vault, no Vault server (decision 0004; Ansible only if a decision
+record shows it earns its place). It ports the approach of
 nerdio-hcl without Nerdio, and follows avd-landing-zone's estate design without depending on it.
 The plan is `docs/knowledge/port-plan.md`; decisions are in `docs/knowledge/decisions/`.
 
