@@ -51,7 +51,6 @@ The kit downloads or calls the components below at run time, straight from their
 Each keeps its own terms, and none of them is covered by this repository's license.
 
 - Terraform and Packer (HashiCorp): Business Source License 1.1.
-- integrations/github Terraform provider: MIT.
 - Terraform providers such as hashicorp/azurerm, hashicorp/azuread and azure/azapi:
   Mozilla Public License 2.0.
 - Azure Verified Modules for Terraform (Microsoft), where adopted: MIT License.
