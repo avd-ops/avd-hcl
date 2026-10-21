@@ -1,5 +1,6 @@
 #!/bin/sh
-# AVD Lab Kit — pre-commit secret scan. See CONTRIBUTING.md.
+# avd-hcl: pre-commit secret scan. See README.md (Contributing).
+# Adapted from this repository's earlier lab kit (same author, MIT, commit de2b9bc); see CREDITS.md.
 #
 # This is the *primary* leak-prevention control: it stops a real subscription
 # ID, tenant ID, or key from entering a commit at all. The CI job and GitHub's
@@ -17,22 +18,23 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   echo "----------------------------------------------------------------------"
   echo "BLOCKED: gitleaks is not installed, so staged changes were NOT scanned."
   echo ""
-  echo "  Install it:  winget install gitleaks"
-  echo "               (or) https://github.com/gitleaks/gitleaks/releases"
+  echo "  Install it (Azure Cloud Shell or any Linux, no root needed):"
+  echo "    mkdir -p ~/bin && curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar -xz -C ~/bin gitleaks"
+  echo "  Other systems: https://github.com/gitleaks/gitleaks/releases (v8.30.1, the version CI uses)"
   echo ""
-  echo "This hook fails closed on purpose (see CONTRIBUTING.md)."
+  echo "This hook fails closed on purpose (README.md, Contributing)."
   echo "To bypass for a single commit you know is clean:  git commit --no-verify"
   echo "----------------------------------------------------------------------"
   exit 1
 fi
 
 echo "gitleaks: scanning staged changes..."
-if ! gitleaks protect --staged --redact --verbose; then
+if ! gitleaks git --pre-commit --staged --redact --verbose; then
   echo ""
   echo "----------------------------------------------------------------------"
   echo "BLOCKED: gitleaks found a potential secret in your staged changes."
   echo ""
-  echo "Do NOT just delete the line and re-commit — if it was ever committed,"
+  echo "Do NOT just delete the line and re-commit: if it was ever committed,"
   echo "it stays in history. Rotate the credential, then scrub it."
   echo "----------------------------------------------------------------------"
   exit 1

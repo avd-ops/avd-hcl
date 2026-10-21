@@ -1,32 +1,31 @@
-# ---------------------------------------------------------------------------
-# Local parameter overrides — NEVER commit these. See CONTRIBUTING.md.
-# Tracked parameter files hold placeholders only; real subscription/tenant/
-# group IDs and email addresses live here and stay on your machine.
-# ---------------------------------------------------------------------------
-*.local.bicepparam
-*.local.config.json
-orchestrator.local.config.json
+# Real values live here and never get committed (docs/guardrails.md, rule 4).
+terraform.tfvars
+*.auto.tfvars.json
+*.pkrvars.hcl
+!example.pkrvars.hcl
+# Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
+backend.hcl
+*.backend.hcl
+*.tfplan
+tfplan
 
-# Generated reports (as-built / evidence bundles)
-/reports/
-/out/
+# Terraform and Packer working state
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+packer_cache/
 
-# Readiness reports carry real subscription/tenant IDs. They belong in /reports/,
-# but ignore them anywhere in case someone accepts a default output path.
+# Operator output (reports, readiness results, evidence bundles)
+/output/
 readiness.json
 *-readiness.json
-avd-readiness-report.json
 
-# Bicep build artifacts (`az bicep build` emits <module>.json next to the source)
-/bicep/modules/*.json
-
-# PowerShell / editor noise
-*.psd1.bak
+# Editors and OS
 .vscode/
 .idea/
 *.swp
-
-# OS
+.DS_Store
 Thumbs.db
 Desktop.ini
-.DS_Store
