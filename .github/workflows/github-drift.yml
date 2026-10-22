@@ -22,11 +22,11 @@ jobs:
     permissions:
       contents: read
       id-token: write # Azure sign-in by OIDC; the federated credential accepts only refs/heads/main
-    env:
-      OUT: ${{ runner.temp }}/drift
     steps:
       - name: Start
-        run: mkdir -p "$OUT" && echo "checkout" > "$OUT/step"
+        run: |
+          echo "OUT=$RUNNER_TEMP/drift" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/drift" && echo "checkout" > "$RUNNER_TEMP/drift/step"
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -51,13 +51,11 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           echo "token" > "$OUT/step"
           echo "Asking Key Vault to sign for a read-only GitHub App token..."
-          if ! token=$(python3 github/scripts/app_token.py --key-url "$KEY_URL" --repository "$REPOSITORY" \
-                --permission administration=read --permission issues=read --permission metadata=read); then
-            exit 1
-          fi
+          token=$(python3 github/scripts/app_token.py --key-url "$KEY_URL" --repository "$REPOSITORY" \
+            --permission administration=read --permission issues=read --permission metadata=read)
           echo "::add-mask::$token"
           outcome=clean
           for dir in github/repos/*/; do
@@ -66,14 +64,12 @@ jobs:
             cp "$dir/backend.tf.example" "$dir/backend.tf"
             printf 'resource_group_name = "%s"\nstorage_account_name = "%s"\ncontainer_name = "tfstate"\n' \
               "$STATE_RG" "$STATE_ACCOUNT" > "$dir/backend.hcl"
-            if ! (cd "$dir" && terraform init -input=false -no-color -backend-config=backend.hcl >/dev/null); then
-              exit 1
-            fi
+            (cd "$dir" && terraform init -input=false -no-color -backend-config=backend.hcl >/dev/null)
             echo "plan $name" > "$OUT/step"
             echo "Planning $name (read-only, no lock)..."
+            code=0
             (cd "$dir" && GITHUB_TOKEN="$token" terraform plan -lock=false -input=false -no-color \
-              -detailed-exitcode > "$OUT/plan-$name.txt" 2>&1)
-            code=$?
+              -detailed-exitcode > "$OUT/plan-$name.txt" 2>&1) || code=$?
             case $code in
               0) ;;
               2) outcome=drift ;;
@@ -92,7 +88,7 @@ jobs:
         if: always()
         with:
           name: drift
-          path: ${{ runner.temp }}/drift
+          path: ${{ env.OUT }}
           retention-days: 14
 
   report:
@@ -127,7 +123,10 @@ jobs:
             echo "Clean."
             exit 0
           fi
-          # The changed resources, for the summary and to comment only when they change.
+          # The label exists after the first apply; create it if it's missing so a report never fails
+          # on it (same color and text as github/modules/repo-settings).
+          gh label create drift --color fbca04 --description "GitHub settings differ from github/ (drift check)" 2>/dev/null || true
+          # The changed resources, for the summary.
           if [ "$outcome" = drift ]; then
             changes=$(grep -hE '^  # .* (will be|must be)' drift/plan-*.txt | sed 's/^  # //' || true)
             summary=$(grep -hE '^Plan: ' drift/plan-*.txt || true)
@@ -139,8 +138,11 @@ jobs:
             title="GitHub settings drift check failed"
             text="The drift check didn't finish, so drift may be unreported."
           fi
-          hash=$(printf '%s' "$outcome $changes" | sha256sum | cut -c1-16)
+          # Comment again only when the plan itself changes, attributes included (refresh lines carry
+          # nothing that changes from day to day, but are dropped to be safe).
+          hash=$( { echo "$outcome $changes"; cat drift/plan-*.txt 2>/dev/null | grep -vE 'Refreshing state|Reading\.\.\.|Read complete|Preparing import|Importing from ID' || true; } | sha256sum | cut -c1-16)
           plan=$(cat drift/plan-*.txt 2>/dev/null | head -c 50000 || true)
+          # shellcheck disable=SC2016 # the backticks are Markdown fences, not expansions
           body=$(printf '%s\n\n%s\n\n```text\n%s\n%s\n```\n\nPlan output (values read from GitHub, quoted as data):\n\n```text\n%s\n```\n\n%s\n\n<!-- drift-hash: %s -->\n' \
             "$text" "$RUN_URL" "$changes" "$summary" "$plan" "Spec: docs/knowledge/github-settings-spec.md, section 9." "$hash")
           if [ -z "$issue" ]; then

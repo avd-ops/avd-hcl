@@ -143,3 +143,13 @@ run "no_required_checks_refused" {
 
   expect_failures = [var.required_checks]
 }
+
+run "kb_auto_merge_needs_the_ruleset" {
+  command = plan
+
+  variables {
+    kb_auto_merge = true
+  }
+
+  expect_failures = [var.kb_auto_merge]
+}

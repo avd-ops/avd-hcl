@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import app_token  # noqa: E402
 
 KEY = "https://contoso-kv.vault.azure.net/keys/settings-reader"
+KID = KEY + "/0123456789abcdef0123456789abcdef"
 
 
 class Resp(io.BytesIO):
@@ -44,8 +45,8 @@ class FakeApi:
 
 def routes(over=None):
     base = {
-        ("GET", KEY + "?api-version=7.4"): (200, {"tags": {"client_id": "Iv1.example"}}),
-        ("POST", KEY + "/sign?api-version=7.4"): (200, {"value": "c2lnbmF0dXJl"}),
+        ("GET", KEY + "?api-version=7.4"): (200, {"key": {"kid": KID}, "tags": {"client_id": "Iv1.example"}}),
+        ("POST", KID + "/sign?api-version=7.4"): (200, {"value": "c2lnbmF0dXJl"}),
         ("GET", "https://api.github.com/repos/contoso/kit/installation"): (200, {"id": 42}),
         ("POST", "https://api.github.com/app/installations/42/access_tokens"): (201, {"token": "ghs_example"}),
     }
@@ -73,7 +74,6 @@ class AppTokenTests(unittest.TestCase):
         api = FakeApi(routes())
         jwt = self.client(api).app_jwt(KEY, now=1_000_000)
         unsigned = jwt.rsplit(".", 1)[0]
-
         expected = app_token.b64url(hashlib.sha256(unsigned.encode()).digest())
         self.assertEqual(api.calls[1][2], {"alg": "RS256", "value": expected})
 
@@ -83,9 +83,20 @@ class AppTokenTests(unittest.TestCase):
             self.client(api).app_jwt(KEY)
 
     def test_sign_refused_reports_status_and_code(self):
-        api = FakeApi(routes({("POST", KEY + "/sign?api-version=7.4"): (403, {"error": {"code": "Forbidden"}})}))
+        api = FakeApi(routes({("POST", KID + "/sign?api-version=7.4"): (403, {"error": {"code": "Forbidden"}})}))
         with self.assertRaisesRegex(app_token.TokenError, "HTTP 403: Forbidden"):
             self.client(api).app_jwt(KEY)
+
+    def test_signs_with_the_versioned_kid(self):
+        api = FakeApi(routes())
+        self.client(api).app_jwt(KEY)
+        self.assertEqual(api.calls[1][1], KID + "/sign?api-version=7.4")
+
+    def test_network_failure_is_a_token_error(self):
+        def down(req, timeout=None):
+            raise urllib.error.URLError("proxy refused")
+        with self.assertRaisesRegex(app_token.TokenError, "failed before a response"):
+            self.client(down).app_jwt(KEY)
 
     def test_not_installed(self):
         api = FakeApi(routes({("GET", "https://api.github.com/repos/contoso/kit/installation"): (404, {"message": "Not Found"})}))

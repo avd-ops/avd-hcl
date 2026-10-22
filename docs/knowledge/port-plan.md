@@ -1,6 +1,6 @@
 ---
 title: "Port plan: native AVD with the HashiCorp stack"
-summary: "Plan to port nerdio-hcl's approach to Terraform that deploys and operates AVD directly, with no Nerdio Manager in the path; awaits the owner's yes"
+summary: "Plan to port nerdio-hcl's approach to Terraform that deploys and operates AVD directly, with no Nerdio Manager in the path; phase 1 built offline"
 topic: roadmap
 status: plan
 last_reviewed: 2026-10-21
@@ -49,7 +49,7 @@ Design that carries over almost unchanged, minus the Nerdio parts.
 | Ownership of AVD objects (nerdio-hcl 0002: "Nerdio owns AVD objects", never `azurerm_virtual_desktop_*`) | Reversed: nothing else owns them now | Terraform owns host pools, app groups, workspaces, scaling plans and their associations through `azurerm`. Runtime state that the service changes (scaling, drain, power) is ignored in `lifecycle` so Terraform and autoscale don't fight |
 | Two stages, two states (platform, then Nerdio config) | Stage 2 existed only because Nerdio had to be running first | One **platform** stage plus an **estate** stage per host pool (so a pool can be planned and replaced alone), plus an **image** stage |
 | Session host lifecycle | Nerdio created, resized and replaced hosts | Option A: Terraform VMs (count or for_each) with Run Command / extensions for join and agent registration, rotation by name generation, like the landing zone's blue/green. Option B: the service's own **session host configuration and session host update** (preview, pooled only, through `azapi`). Recommend A as default, B as an opt-in for pooled pools (question 5) |
-| Registration token | Nerdio handled it | `azurerm_virtual_desktop_host_pool_registration_info` with a short expiry, consumed by the agent install, never output |
+| Registration token | Nerdio handled it | Short expiry set on the host pool through ARM, token read ephemerally and written once to the agent install run command, never in state ([platform.md](platform.md)) |
 | Readiness checks | Nerdio-specific ones go | Drop `sub.nerdio_license`, `sub.app_service`, `sub.sql`, `id.app_registration`. Add AVD ones (section 3) |
 | Chat assistant's tool surface | It drove a two-stage Nerdio flow | Same assistant design (Container Apps, Entra sign-in, Claude API by workload identity federation, can start plans, can't approve); new questions and explanations |
 | Hardening module | Built for Nerdio's App Service, SQL and Key Vault | Private endpoints for profile storage, Key Vault and the AVD private link (optional), not for a management app |
@@ -101,8 +101,9 @@ The prior-art check of 2026-10-21 (AVD family KB's `kb-prior-art` workflow) foun
   modules `avm-res-desktopvirtualization-hostpool`, `-applicationgroup`, `-workspace`,
   `-scalingplan`, and pattern modules `avm-ptn-avd-lza-managementplane` and
   `avm-ptn-avd-lza-insights`. These are the first candidates to wrap, the way avd-landing-zone
-  wraps the AVM Bicep modules. Phase 1 pins each by version and checks its defaults (zones,
-  SKUs) against a region without zones (avd-landing-zone lesson 0001).
+  wraps the AVM Bicep modules. Checked in phase 1: every one requires azurerm < 5.0 and pulls the
+  modtm telemetry provider, so the kit writes its own thin modules on azurerm 5 for now
+  ([decision 0003](decisions/0003-own-modules-on-azurerm-5.md), proposed).
 - **Community labs** (pooled, Entra-joined, FSLogix, scaling plan in Terraform) exist, the largest
   around 90 stars. Prior art only: read for facts, not adopted.
 - Nothing found does the guided phases, the shared schema or the gated pipeline for native AVD;
@@ -115,24 +116,19 @@ The prior-art check of 2026-10-21 (AVD family KB's `kb-prior-art` workflow) foun
    git history at `de2b9bc`; its useful parts were already ported to avd-landing-zone). Scope:
    Terraform, Packer and Vault, plus Ansible only if a decision record shows it earns its place.
    Later the same day: no Vault server; Key Vault holds secrets (decision 0004).
-2. **How does it relate to the landing zone?** Separate repo with shared contracts
-   (recommended), shared parameter schema, or parallel option (section 4).
+2. **How does it relate to the landing zone?** Separate repo with shared contracts (the
+   recommendation; the owner said "go" to the recommendations on 2026-10-21).
 3. **Scope of the first build:** pooled, Entra-joined, one host pool, FSLogix on Azure Files,
-   marketplace image first (recommended), with personal pools, AD DS and the custom image in
-   later phases?
-4. **Images:** Packer (HCL first, nerdio-hcl's build reused with attribution) or Azure Image
-   Builder through `azapi` (what the landing zone uses)? Recommend Packer.
-5. **Session hosts:** Terraform-managed VMs with rotation (recommended default) or session host
-   configuration and session host update (preview, pooled only) as an opt-in?
-6. **The chat assistant:** port it in the first build, or ship the engine, CLI and Actions form
-   first and add the chat after? Recommend the engine first, chat in phase 3; the schema is built
-   for both from day one.
-7. **WDOT pin:** nerdio-hcl pins WDOT `main` at a later commit because its KB infers that v1.1
-   breaks a first run on a VM with no WDOT event log and that WDOT can fail without an exit code.
-   The landing zone is checking its own build for that failure mode; the kit follows whatever pin
-   and post-run check come out of that, and checks the WDOT event log itself.
-8. **Sandbox runs:** each phase's live test needs a written estimate and the owner's exact
-   `go batch <id> $<total>`. Fine to queue one batch per phase?
+   marketplace image. Personal pools, AD DS and the custom image come later.
+4. **Images:** Packer, with nerdio-hcl's build reused with attribution.
+5. **Session hosts:** Terraform-managed VMs by default; session host configuration and update
+   (preview, pooled only) as a later opt-in.
+6. **The chat assistant:** engine, CLI and Actions form first, chat in phase 4; the schema is
+   built for both.
+7. **WDOT pin:** follows the landing zone's fix for the silent first-run failure, plus a check
+   of the WDOT event log.
+8. **Sandbox runs:** one batch per phase, each with a written estimate and the owner's exact
+   `go batch <id> $<total>`.
 
 ## 7. Phased order
 
@@ -142,9 +138,12 @@ sandbox run.
 0. **Decide and set up.** Owner answers the open questions. Prior-art check (done). This repo:
    lab kit removed, Apache-2.0, NOTICE and CREDITS, guardrails, KB skeleton, CI. Family KB tooling
    and family.yaml rows follow when the repo goes public.
-1. **Engine core, offline.** Parameter schema, `init`, foundation, network, FSLogix storage, Key
-   Vault, control plane (host pool, desktop app group, workspace, assignments), session hosts
-   from a marketplace image, AVD Insights. `terraform test` with mocked providers only.
+1. **Engine core, offline.** Built 2026-10-21 ([platform.md](platform.md)): parameter schema and
+   its check, foundation, network, FSLogix storage, Key Vault, control plane (host pool, desktop
+   app group, workspace, assignments, and the scaling plan pulled forward from phase 3), session
+   hosts from a marketplace or gallery image, AVD Insights. `terraform test` with mocked
+   providers only. Moved to phase 2: `init` (the command that writes tfvars from the schema) and
+   tflint.
 2. **Gated pipeline and readiness.** Deploy pipeline (plan and apply identities, reviewer gate),
    readiness engine with the Nerdio checks removed and the AVD ones added, verify phase checks.
    First sandbox run after an estimate and the owner's go.

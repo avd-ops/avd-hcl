@@ -25,6 +25,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 GITHUB_API = "https://api.github.com"
@@ -83,15 +84,19 @@ class Client:
     def request(self, method: str, url: str, headers: dict, body: dict | None = None) -> tuple[int, dict]:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        host = urllib.parse.urlsplit(url).netloc
         try:
             with self._open(req, timeout=TIMEOUT) as resp:
-                return resp.status, json.loads(resp.read() or b"{}")
+                status, raw = resp.status, resp.read()
         except urllib.error.HTTPError as err:
-            raw = err.read()
-            try:
-                return err.code, json.loads(raw or b"{}")
-            except ValueError:
-                return err.code, {"message": raw[:300].decode(errors="replace")}
+            status, raw = err.code, err.read()
+        except (urllib.error.URLError, OSError) as err:
+            # DNS, proxy, connection reset or timeout: report the step, never a traceback.
+            raise TokenError(f"{method} {host} failed before a response: {err}") from err
+        try:
+            return status, json.loads(raw or b"{}")
+        except ValueError:
+            return status, {"message": raw[:300].decode(errors="replace")}
 
     def _vault_headers(self) -> dict:
         return {"Authorization": f"Bearer {self._token_source()}", "Content-Type": "application/json"}
@@ -105,9 +110,13 @@ class Client:
         client_id = (key.get("tags") or {}).get("client_id")
         if not client_id:
             raise TokenError("The Key Vault key has no client_id tag; tag it with the App's client ID.")
+        # Sign with the current version's kid: Key Vault's sign operation is /keys/{name}/{version}/sign.
+        kid = (key.get("key") or {}).get("kid")
+        if not kid:
+            raise TokenError("Key Vault returned the key without its kid.")
         unsigned = signing_input(client_id, int(time.time()) if now is None else now)
         digest = b64url(hashlib.sha256(unsigned.encode()).digest())
-        status, signed = self.request("POST", f"{key_url}/sign?api-version={KEY_VAULT_API}", headers,
+        status, signed = self.request("POST", f"{kid}/sign?api-version={KEY_VAULT_API}", headers,
                                       {"alg": "RS256", "value": digest})
         if status != 200 or "value" not in signed:
             raise TokenError(f"Key Vault wouldn't sign (HTTP {status}: "

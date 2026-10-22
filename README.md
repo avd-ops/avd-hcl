@@ -7,8 +7,29 @@ Native Azure Virtual Desktop, deployed and operated with the HashiCorp stack: Te
 estate, Packer for golden images, Azure Key Vault and managed identities for secrets (no Vault
 server, decision 0004), and Ansible only if it turns out to earn its place. No vendor management plane sits in the path.
 
-**Status: phase 0, setup.** There is no Terraform here yet. The plan is
-[docs/knowledge/port-plan.md](docs/knowledge/port-plan.md).
+**Status: phase 1, built and tested offline only.** The platform stage builds one pooled,
+Entra-joined host pool with FSLogix, autoscale and AVD Insights; it has not run against Azure yet.
+The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is built is
+[docs/knowledge/platform.md](docs/knowledge/platform.md).
+
+## Layout
+
+| Path | What |
+|---|---|
+| `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts, and run-secrets for the values that never touch state. Each has `tests/` for `terraform test`, except run-secrets, tested through the root |
+| `environments/example/01-platform/` | The platform root that wires the modules together; copy it per environment |
+| `schema/parameters.json` | The one list of deployment parameters behind every front door |
+| `scripts/schema/` | The schema check CI runs |
+
+## Try it offline
+
+From Cloud Shell, with no Azure changes (mock providers only):
+
+```bash
+git clone https://github.com/nickprignano/avd-hcl.git && cd avd-hcl
+for d in modules/*/ environments/example/01-platform/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
+python3 scripts/schema/check.py
+```
 
 ## Where it comes from
 
@@ -43,8 +64,9 @@ missing and prints how to install it in Cloud Shell:
 git config core.hooksPath .githooks
 ```
 
-CI runs the same scan over full history, plus the guards in `.github/workflows/ci.yml`. Every
-reuse gets a row in [CREDITS.md](CREDITS.md).
+CI runs the same scan over full history, `terraform fmt`, `validate` and `test` in every module
+and root, the schema check, and the guards in `.github/workflows/ci.yml`. Every reuse gets a row
+in [CREDITS.md](CREDITS.md), and a public Microsoft ID gets a line in `.github/public-ids.txt`.
 
 ## License
 

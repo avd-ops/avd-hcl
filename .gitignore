@@ -32,5 +32,9 @@ readiness.json
 Thumbs.db
 Desktop.ini
 
+# Lock files belong to roots (environments/, github/repos/), not to reusable modules.
+modules/**/.terraform.lock.hcl
+github/modules/**/.terraform.lock.hcl
+
 # Python
 __pycache__/

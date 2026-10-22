@@ -45,6 +45,12 @@ variable "kb_auto_merge" {
   description = "Turn on 'Allow auto-merge' and require the kb-auto-merge workflow's auto-merge check, together, as ai-brain 0014 section 3 requires. Only once that workflow is installed here."
   type        = bool
   default     = false
+  validation {
+    # Without the ruleset nothing would require the check, and an armed pull request would merge
+    # with nothing gating it.
+    condition     = !var.kb_auto_merge || var.enforce_ruleset
+    error_message = "kb_auto_merge needs enforce_ruleset: auto-merge only with the ruleset that requires the auto-merge check."
+  }
 }
 
 variable "extra_labels" {
