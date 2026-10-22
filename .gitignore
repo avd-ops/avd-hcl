@@ -6,6 +6,12 @@ terraform.tfvars
 # Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
 backend.hcl
 *.backend.hcl
+# The pipeline stage keeps one working folder, variables and backend per environment
+# (scripts/pipeline/bootstrap.sh writes them).
+environments/*/00-pipeline/backend_override.tf
+environments/*/00-pipeline/.terraform-*/
+environments/*/00-pipeline/.state/
+environments/*/00-pipeline/*.pipeline.tfvars.json
 # github/: backend.tf is copied from backend.tf.example after the bootstrap (spec section 11).
 github/repos/*/backend.tf
 *.tfplan
@@ -18,6 +24,9 @@ tfplan
 .terraform.tfstate.lock.info
 crash.log
 packer_cache/
+
+# Your schema answers (scripts/schema/answers.py init). No secrets, but they name your groups.
+/.avd/
 
 # Operator output (reports, readiness results, evidence bundles)
 /output/

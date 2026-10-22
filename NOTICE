@@ -54,7 +54,9 @@ Each keeps its own terms, and none of them is covered by this repository's licen
 - Terraform providers hashicorp/azurerm, hashicorp/azuread, hashicorp/random, hashicorp/time
   and azure/azapi:
   Mozilla Public License 2.0.
-- integrations/github Terraform provider (GitHub settings in github/): MIT License.
+- integrations/github Terraform provider (GitHub settings in github/, and the deploy pipeline's
+  environments): MIT License.
+- TFLint and its azurerm ruleset (terraform-linters), run in CI: Mozilla Public License 2.0.
 - Azure Verified Modules for Terraform (Microsoft), where adopted: MIT License.
 - Windows Desktop Optimization Tool (The-Virtual-Desktop-Team): MIT license, plus a Microsoft
   sample-code EULA in the same repository. Fetched at a pinned commit during image builds.

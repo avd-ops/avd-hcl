@@ -144,9 +144,12 @@ sandbox run.
    hosts from a marketplace or gallery image, AVD Insights. `terraform test` with mocked
    providers only. Moved to phase 2: `init` (the command that writes tfvars from the schema) and
    tflint.
-2. **Gated pipeline and readiness.** Deploy pipeline (plan and apply identities, reviewer gate),
-   readiness engine with the Nerdio checks removed and the AVD ones added, verify phase checks.
-   First sandbox run after an estimate and the owner's go.
+2. **Gated pipeline and readiness.** 2a built 2026-10-22 ([pipeline.md](pipeline.md)): deploy
+   pipeline (state storage, plan and apply identities, reviewer gate, saved-plan hash), the
+   `00-pipeline` root, the deploy workflow, the bootstrap script, `init` and `render` from the
+   schema, and tflint. 2b built 2026-10-22 ([readiness.md](readiness.md)): the readiness engine
+   with the Nerdio checks removed and the AVD ones added, also a `preflight` stage in the Deploy
+   workflow. Verify checks come with the first sandbox run, after an estimate and the owner's go.
 3. **Day 2.** Scaling plans, auto shutdown and budget, host rotation, Packer image stage and
    gallery pin, personal pools with Start VM on Connect.
 4. **Chat front door.** The assistant over the same schema and pipeline, handover runbook.

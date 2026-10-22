@@ -17,6 +17,10 @@ page, not a copy.
   questions and the phased order.
 - [platform.md](platform.md): what the platform stage builds, where each module comes from,
   and the gotchas found writing it.
+- [pipeline.md](pipeline.md): the gated deploy pipeline, who can do what, and why a private
+  repository can't use it yet.
+- [readiness.md](readiness.md): the read-only check before the platform stage, every check and
+  the right it needs.
 - [decisions/](decisions/): decision records in MADR 4 format.
 - [github-settings-spec.md](github-settings-spec.md): this repository's GitHub settings as
   Terraform in `github/`, with a read-only drift check (proposed).
