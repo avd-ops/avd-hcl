@@ -31,3 +31,6 @@ readiness.json
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Python
+__pycache__/
