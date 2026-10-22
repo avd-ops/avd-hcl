@@ -12,5 +12,8 @@ Ideas and facts are credited too, not only code ([decision 0002](docs/knowledge/
 | `modules/key-vault`, `modules/monitoring`, `modules/control-plane`, `modules/session-hosts`: design, names, schedules, counters and RDP defaults | [avd-landing-zone](https://github.com/avd-ops/avd-landing-zone) `bicep/modules/` | MIT | `91c7acf` | Rewritten in Terraform; each file's header names its Bicep module |
 | `modules/session-hosts/scripts/Register-AvdAgent.ps1`, `Set-FSLogixConfiguration.ps1` | [avd-landing-zone](https://github.com/avd-ops/avd-landing-zone) `scripts/sessionhost/` | MIT | `91c7acf` | Copied; help text points at the Terraform module |
 | Fail-closed gitleaks pre-commit hook and full-history CI scan | This repo's earlier lab kit (same author) | MIT, same author | `de2b9bc` | Kept and edited |
+| GitHub repository settings module (labels, read-only workflow token, ruleset on the default branch) | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `modules/github-repo` | Apache-2.0 | `75f59bc` | Adapted in `github/modules/repo-settings` |
+| GitHub App token from a non-exportable Key Vault key (Key Vault signs the JWT) | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `assistant/pipeline.py` | Apache-2.0 | `75f59bc` | Adapted in `github/scripts/app_token.py` |
+| GitHub work conventions (merge commits, required checks, admin bypass for pull requests, labels) and secrets handling | [ai-brain](https://github.com/nickprignano/ai-brain) decisions 0011, 0012, 0014, 0016 | Apache-2.0 | `aee6a18` | Conventions, in our own words (`github/conventions.md`) |
 
 Add a row in the same pull request that brings something in.

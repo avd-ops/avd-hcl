@@ -50,11 +50,11 @@ This repository does not include, vendor or redistribute any third-party code or
 The kit downloads or calls the components below at run time, straight from their publishers.
 Each keeps its own terms, and none of them is covered by this repository's license.
 
-- Terraform, Packer and Vault (HashiCorp): Business Source License 1.1.
-- OpenTofu and OpenBao, where used instead: Mozilla Public License 2.0.
+- Terraform and Packer (HashiCorp): Business Source License 1.1.
 - Terraform providers hashicorp/azurerm, hashicorp/azuread, hashicorp/random, hashicorp/time
   and azure/azapi:
   Mozilla Public License 2.0.
+- integrations/github Terraform provider (GitHub settings in github/): MIT License.
 - Azure Verified Modules for Terraform (Microsoft), where adopted: MIT License.
 - Windows Desktop Optimization Tool (The-Virtual-Desktop-Team): MIT license, plus a Microsoft
   sample-code EULA in the same repository. Fetched at a pinned commit during image builds.
