@@ -1,0 +1,156 @@
+# Daily drift check for this repository's GitHub settings (docs/knowledge/github-settings-spec.md,
+# section 9). It plans, reports, and never applies: there is no apply step, and the plan job's
+# GitHub token can only read. Inert until the bootstrap sets the repository variables.
+name: GitHub drift
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: github-drift
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  plan:
+    name: Plan
+    if: github.ref == 'refs/heads/main' && vars.DRIFT_KEY_URL != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Azure sign-in by OIDC; the federated credential accepts only refs/heads/main
+    env:
+      OUT: ${{ runner.temp }}/drift
+    steps:
+      - name: Start
+        run: mkdir -p "$OUT" && echo "checkout" > "$OUT/step"
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+      - name: Azure sign-in
+        run: echo "azure sign-in" > "$OUT/step"
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.DRIFT_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Mint a read-only token and plan
+        env:
+          KEY_URL: ${{ vars.DRIFT_KEY_URL }}
+          STATE_RG: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+          STATE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+          REPOSITORY: ${{ github.repository }}
+          ARM_USE_OIDC: "true"
+          ARM_CLIENT_ID: ${{ vars.DRIFT_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "token" > "$OUT/step"
+          echo "Asking Key Vault to sign for a read-only GitHub App token..."
+          if ! token=$(python3 github/scripts/app_token.py --key-url "$KEY_URL" --repository "$REPOSITORY" \
+                --permission administration=read --permission issues=read --permission metadata=read); then
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          outcome=clean
+          for dir in github/repos/*/; do
+            name=$(basename "$dir")
+            echo "init $name" > "$OUT/step"
+            cp "$dir/backend.tf.example" "$dir/backend.tf"
+            printf 'resource_group_name = "%s"\nstorage_account_name = "%s"\ncontainer_name = "tfstate"\n' \
+              "$STATE_RG" "$STATE_ACCOUNT" > "$dir/backend.hcl"
+            if ! (cd "$dir" && terraform init -input=false -no-color -backend-config=backend.hcl >/dev/null); then
+              exit 1
+            fi
+            echo "plan $name" > "$OUT/step"
+            echo "Planning $name (read-only, no lock)..."
+            (cd "$dir" && GITHUB_TOKEN="$token" terraform plan -lock=false -input=false -no-color \
+              -detailed-exitcode > "$OUT/plan-$name.txt" 2>&1)
+            code=$?
+            case $code in
+              0) ;;
+              2) outcome=drift ;;
+              *) cat "$OUT/plan-$name.txt"; exit 1 ;;
+            esac
+          done
+          echo "$outcome" > "$OUT/outcome"
+          echo "Outcome: $outcome"
+      - name: Record a failure
+        if: failure()
+        run: |
+          step=$(cat "$OUT/step" 2>/dev/null || echo "start")
+          echo "failed" > "$OUT/outcome"
+          echo "$step" > "$OUT/failed-step"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: drift
+          path: ${{ runner.temp }}/drift
+          retention-days: 14
+
+  report:
+    name: Report
+    needs: plan
+    if: always() && github.ref == 'refs/heads/main' && vars.DRIFT_KEY_URL != ''
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write # the drift issue only; no Azure, no App token here
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: drift
+          path: drift
+      - name: Open, update or close the drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          outcome=$(cat drift/outcome 2>/dev/null || echo failed)
+          step=$(cat drift/failed-step 2>/dev/null || echo "before plan")
+          issue=$(gh issue list --label drift --state open --json number --jq '.[0].number // empty')
+          if [ "$outcome" = clean ]; then
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --body "Clean: GitHub settings match github/ again ($RUN_URL)."
+              gh issue close "$issue" --reason completed
+            fi
+            echo "Clean."
+            exit 0
+          fi
+          # The changed resources, for the summary and to comment only when they change.
+          if [ "$outcome" = drift ]; then
+            changes=$(grep -hE '^  # .* (will be|must be)' drift/plan-*.txt | sed 's/^  # //' || true)
+            summary=$(grep -hE '^Plan: ' drift/plan-*.txt || true)
+            title="GitHub settings drift"
+            text="The daily plan found settings that differ from github/. Nothing was changed; apply from Cloud Shell after review."
+          else
+            changes="failed at: $step"
+            summary=""
+            title="GitHub settings drift check failed"
+            text="The drift check didn't finish, so drift may be unreported."
+          fi
+          hash=$(printf '%s' "$outcome $changes" | sha256sum | cut -c1-16)
+          plan=$(cat drift/plan-*.txt 2>/dev/null | head -c 50000 || true)
+          body=$(printf '%s\n\n%s\n\n```text\n%s\n%s\n```\n\nPlan output (values read from GitHub, quoted as data):\n\n```text\n%s\n```\n\n%s\n\n<!-- drift-hash: %s -->\n' \
+            "$text" "$RUN_URL" "$changes" "$summary" "$plan" "Spec: docs/knowledge/github-settings-spec.md, section 9." "$hash")
+          if [ -z "$issue" ]; then
+            gh issue create --title "$title" --label drift --body "$body"
+            exit 0
+          fi
+          last=$(gh issue view "$issue" --json body,comments \
+            --jq '[.body] + [.comments[].body] | map(capture("drift-hash: (?<h>[0-9a-f]+)").h // empty) | last // empty')
+          if [ "$last" = "$hash" ]; then
+            echo "Same drift as the last report; no new comment."
+          else
+            gh issue comment "$issue" --body "$body"
+          fi

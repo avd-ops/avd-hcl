@@ -61,7 +61,7 @@ github/
     versions.tf              integrations/github pinned; provider "github" { owner = "nickprignano" },
                              token from GITHUB_TOKEN in the environment
   bootstrap/                 the small Azure piece (Key Vault, state container, identity; section 8)
-  scripts/app-token.py       mints an installation token from a JWT signed by Key Vault
+  scripts/app_token.py       mints an installation token from a JWT signed by Key Vault
   conventions.md             the settings table in section 5, with where each one comes from
 ```
 
@@ -289,17 +289,17 @@ editions knowing they are source-available (decision 0004); OpenTofu and OpenBao
 Collected in the PR and the thread reply; numbered here so answers can refer to them.
 
 - **Q1.** Answered: Terraform and Packer community editions, no Vault (decision 0004).
-- **Q2.** Is your account on GitHub Pro? Rulesets on a private personal repo need it (the drift
-  check no longer does). Without Pro, the ruleset only takes effect once the repo is public.
+- **Q2.** Answered: not on GitHub Pro yet, upgrading. The module's `enforce_ruleset` switch stays
+  off until then (or until the repo is public); everything else applies without Pro.
 - **Q3.** Answered: the second repository is nerdio-hcl, handled in its own project (section 7).
 - **Q4.** OK that the read-only drift check runs with no reviewer, pinned to `main` by its OIDC
   subject instead of a GitHub environment?
 - **Q5.** Answered: a "settings writer" App whose key Key Vault holds, signable only by your
   account; a fine-grained token only for the first apply.
 - **Q6.** Answered: Azure Key Vault holds both App keys; no Vault server (decision 0004).
-- **Q7.** Delete branches on merge, squash and rebase off, Projects off, Dependabot version updates
+- **Q7.** (built as proposed in the code PR, except the Dependabot file, which waits for your yes) Delete branches on merge, squash and rebase off, Projects off, Dependabot version updates
   file: yes to each?
-- **Q8.** Topics and the new description as proposed?
+- **Q8.** (built as proposed) Topics and the new description as proposed?
 - **Q9.** Drop the state backend? With an import block for every managed object, a plan against
   an empty local state shows the same drift (imports plus updates), and the storage account goes
   away. The cost: the ruleset's numeric ID is written into the import block (a GitHub ID, not a

@@ -6,6 +6,8 @@ terraform.tfvars
 # Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
 backend.hcl
 *.backend.hcl
+# github/: backend.tf is copied from backend.tf.example after the bootstrap (spec section 11).
+github/repos/*/backend.tf
 *.tfplan
 tfplan
 
