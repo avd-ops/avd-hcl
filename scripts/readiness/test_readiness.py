@@ -32,9 +32,9 @@ class FakeAz:
             "account show": {"id": SUB, "name": "Contoso Sandbox", "user": {"type": "user", "name": "admin@contoso.com"}},
             "ad signed-in-user show": "00000000-0000-0000-0000-000000000004",
             "role assignment list": ["Owner"],
-            "ad group show": USERS,
             "ad group list": [USERS],
-            "ad sp show": "00000000-0000-0000-0000-000000000005",
+            "ad sp list": ["00000000-0000-0000-0000-000000000005"],
+            "network vnet show": {"prefixes": ["10.0.0.0/16", "fd00:db8::/48"]},
             "provider list": [{"ns": ns, "state": "Registered"} for ns in subscription.platform_providers()],
             "account list-locations": ["eastus2", "centralus"],
             "feature show": "Registered",
@@ -89,6 +89,10 @@ class ReadinessTest(unittest.TestCase):
         self.assertFalse(is_read_only(["rest", "--url", "x", "--body", "{}"]))
         self.assertTrue(is_read_only(["rest", "--url", "x"]))
         self.assertFalse(is_read_only(["feature", "register", "--name", "x"]))
+        self.assertFalse(is_read_only(["rest", "-m", "post", "--url", "x"]))
+        self.assertFalse(is_read_only(["rest", "--method=put", "--url", "x"]))
+        self.assertFalse(is_read_only(["rest", "--method", "get", "--body=x", "--url", "x"]))
+        self.assertTrue(is_read_only(["rest", "--method=GET", "--url", "x"]))
 
     def test_missing_size_is_no_go(self):
         _, results = run(FakeAz({"vm list-skus": []}))
@@ -210,6 +214,52 @@ class ReadinessTest(unittest.TestCase):
         from pathlib import Path
         page = (Path(__file__).resolve().parents[2] / "docs" / "knowledge" / "readiness.md").read_text()
         self.assertEqual([c for c in model.REGISTRY if f"| `{c}` |" not in page], [])
+
+    def test_unreadable_service_principal_is_no_access_not_no_go(self):
+        _, results = run(FakeAz({"ad sp list": None}))
+        self.assertEqual(by_id(results, "id.avd_principal")[0].status, "no-access")
+        _, results = run(FakeAz({"ad sp list": []}))
+        self.assertEqual(by_id(results, "id.avd_principal")[0].status, "fail")
+
+    def test_unreadable_group_by_id_is_no_access(self):
+        _, results = run(FakeAz({"ad group list": None}))
+        self.assertEqual(by_id(results, "id.groups")[0].status, "no-access")
+        _, results = run(FakeAz({"ad group list": []}))
+        self.assertEqual(by_id(results, "id.groups")[0].status, "fail")
+
+    def test_dual_stack_hub_is_checked(self):
+        hub = "/subscriptions/x/resourceGroups/rg-hub/providers/Microsoft.Network/virtualNetworks/vnet-hub"
+        _, results = run(hub_vnet_id=hub)
+        self.assertEqual([r.status for r in by_id(results, "net.hub")], ["pass", "pass"])
+        _, results = run(FakeAz({"network vnet show": {"prefixes": ["10.50.0.0/16"]}}), hub_vnet_id=hub)
+        self.assertEqual(by_id(results, "net.hub")[0].status, "fail")
+
+    def test_restricted_size_skips_what_depends_on_it(self):
+        sku = {**SKU, "restrictions": [{"type": "Location", "reasonCode": "NotAvailableForSubscription"}]}
+        _, results = run(FakeAz({"vm list-skus": [sku]}), availability_zones=["1"])
+        self.assertEqual(by_id(results, "avd.vm_size")[0].status, "fail")
+        for cid in ("avd.vm_features", "avd.zones", "avd.vcpu"):
+            self.assertEqual(by_id(results, cid)[0].status, "skipped", cid)
+
+    def test_unknown_vcpu_count_is_a_warning(self):
+        sku = {**SKU, "capabilities": [c for c in SKU["capabilities"] if c["name"] != "vCPUs"]}
+        _, results = run(FakeAz({"vm list-skus": [sku]}))
+        self.assertEqual(by_id(results, "avd.vcpu")[0].status, "warn")
+
+    def test_mask_keeps_links_and_public_ids(self):
+        avd_app = "9cdead84-a844-4324-93f2-b2e6bb768d07"
+        text = f"see https://learn.microsoft.com/azure/x, az ad sp create --id {avd_app}, sub {SUB}, Azure Network"
+        masked = report.mask(text, ["Azure", "Network"])
+        self.assertIn("https://learn.microsoft.com/azure/x", masked)
+        self.assertIn(avd_app, masked)
+        self.assertNotIn(SUB, masked)
+        self.assertIn("Azure Network", masked)
+        self.assertEqual(report.mask("tenant Contoso Ltd, admin@contoso.com", ["Contoso Ltd", "admin@contoso.com"]),
+                         "tenant <account>, <account>")
+
+    def test_unreadable_cloud_is_recorded_as_assumed(self):
+        ctx, results = run(FakeAz({"cloud show": None}))
+        self.assertEqual(ctx.cloud, "AzureCloud (assumed)")
 
     def test_unknown_check_id_is_a_usage_error(self):
         with self.assertRaises(runner.UsageError):

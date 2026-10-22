@@ -39,15 +39,20 @@ def subscription_owner(ctx, c):
                   "Activate an eligible role in PIM, then az login again; otherwise ask a subscription Owner")
 
 
+CANT_SEARCH = "couldn't search the directory"
+
+
 def find_group(ctx, value: str):
-    """(object ID, None) for a group by ID or exact display name, or (None, why not)."""
-    if UUID.match(value):
-        found = ctx.az(["ad", "group", "show", "--group", value, "--query", "id"])
-        return (found, None) if found else (None, "no group with that object ID")
-    rows = ctx.az(["ad", "group", "list", "--filter", f"displayName eq '{value.replace(chr(39), chr(39) * 2)}'",
+    """(object ID, None) for a group by ID or exact display name, or (None, why not). A list with
+    a filter tells "not there" (empty) apart from "can't read" (az fails)."""
+    by_id = UUID.match(value)
+    field = "id" if by_id else "displayName"
+    rows = ctx.az(["ad", "group", "list", "--filter", f"{field} eq '{value.replace(chr(39), chr(39) * 2)}'",
                    "--query", "[].id"])
     if rows is None:
-        return None, "couldn't search the directory"
+        return None, CANT_SEARCH
+    if by_id and not rows:
+        return None, "no group with that object ID"
     if len(rows) != 1:
         return None, f"{len(rows)} groups have that name; use its object ID"
     return rows[0], None
@@ -55,7 +60,7 @@ def find_group(ctx, value: str):
 
 @check("id.groups", "AVD groups", needs="Directory read (Group.Read.All for an identity)", kb=KB, inputs=["user_groups"],
        source="https://learn.microsoft.com/azure/virtual-desktop/assign-users-to-application-group",
-       reads=["az ad group show", "az ad group list"])
+       reads=["az ad group list"])
 def groups(ctx, c):
     out = []
     for key, label in (("user_groups", "Users"), ("admin_groups", "Admins")):
@@ -64,7 +69,7 @@ def groups(ctx, c):
             shown = ctx.name("group", value)
             if gid:
                 out.append(c.ok(f"{shown} found", title=f"{label} group"))
-            elif why == "couldn't search the directory":
+            elif why == CANT_SEARCH:
                 out.append(c.no_access(f"{shown}: {why}", title=f"{label} group"))
             else:
                 out.append(c.fail(f"{shown}: {why}", "Fix the name in your answers, or create the group first",
@@ -74,11 +79,13 @@ def groups(ctx, c):
 
 @check("id.avd_principal", "AVD service principal", needs="Directory read (Application.Read.All for an identity)",
        kb=KB, source="https://learn.microsoft.com/azure/virtual-desktop/service-principal-assign-roles",
-       reads=["az ad sp show"])
+       reads=["az ad sp list"])
 def avd_principal(ctx, c):
     """Scaling plans and Start VM on Connect act through it, and the stage grants it a role."""
-    found = ctx.az(["ad", "sp", "show", "--id", AVD_APP_ID, "--query", "id"])
+    found = ctx.az(["ad", "sp", "list", "--filter", f"appId eq '{AVD_APP_ID}'", "--query", "[].id"])
+    if found is None:
+        return c.no_access("couldn't search the directory for it")
     if found:
         return c.ok("present in the tenant")
-    return c.fail("the Azure Virtual Desktop service principal isn't in this tenant (or you can't read it)",
+    return c.fail("the Azure Virtual Desktop service principal isn't in this tenant",
                   f"Register Microsoft.DesktopVirtualization, or az ad sp create --id {AVD_APP_ID} as an admin")

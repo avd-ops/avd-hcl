@@ -38,12 +38,14 @@ def is_read_only(args: List[str]) -> bool:
         return False
     if words[0] == "rest":
         lowered = [a.lower() for a in args]
-        if "--body" in lowered or "-b" in lowered:
-            return False
-        try:
-            method = lowered[lowered.index("--method") + 1]
-        except (ValueError, IndexError):
-            method = "get"  # az rest defaults to GET
+        method = "get"  # az rest defaults to GET
+        for i, a in enumerate(lowered):
+            if a in ("--body", "-b") or a.startswith(("--body=", "-b=")):
+                return False
+            if a in ("--method", "-m"):
+                method = lowered[i + 1] if i + 1 < len(lowered) else ""
+            elif a.startswith(("--method=", "-m=")):
+                method = a.split("=", 1)[1]
         return method == "get"
     last = words[-1]
     return last in READ_VERBS or last.startswith(READ_PREFIXES)

@@ -39,8 +39,8 @@ failed, exit 1), **INCOMPLETE** (every identity or subscription check came back 
 | `op.tools` | Terraform 1.11+, python3 3.9+, az, jq, git | none | PATH |
 | `op.signin` | Signed in to az | none | `az account show` |
 | `id.sub_owner` | Owner, or Contributor plus Role Based Access Control Administrator | Reader | `az role assignment list` |
-| `id.groups` | Every user and admin group exists, by ID or by exactly one display name | Directory read | `az ad group show`, `az ad group list` |
-| `id.avd_principal` | The Azure Virtual Desktop service principal is in the tenant | Directory read | `az ad sp show` |
+| `id.groups` | Every user and admin group exists, by ID or by exactly one display name | Directory read | `az ad group list` (filtered by ID or name) |
+| `id.avd_principal` | The Azure Virtual Desktop service principal is in the tenant | Directory read | `az ad sp list` (filtered by app ID) |
 | `sub.providers` | The platform root's providers are registered (the list is read from its `versions.tf`) | Reader | `az provider list` |
 | `sub.region` | The region is open to the subscription | Reader | `az account list-locations` |
 | `sub.encryption_at_host` | The EncryptionAtHost feature is registered, when it's on | Reader | `az feature show` |
@@ -78,6 +78,15 @@ A test fails when a check is registered but missing from this table.
   subscription.
 - **`TrustedLaunchDisabled`** is only present on sizes that can't use it; its absence means
   supported. `PremiumIO` and `EncryptionAtHostSupported` are the other way round.
+- **"Not there" and "can't read" look the same to `az ... show`:** both just fail. The group and
+  service principal checks use a filtered `az ... list` instead, which returns an empty list when
+  the object doesn't exist and fails only when the directory can't be read, so a missing right
+  comes back as no-access, not as a NO-GO.
+- **A size restricted for the subscription** (`restrictions[].type == "Location"`) makes the
+  feature, zone and quota checks skip, so the report doesn't call an unusable size fine.
+- **Masking must not break the fixes.** Links and Microsoft's public IDs (`.github/public-ids.txt`)
+  are left alone, and an account named only a word the report itself uses (Azure, Network) isn't
+  masked, or every link and role name would be.
 - **Signed in as a service principal** (the pipeline), the deployer-rights and hub-rights checks
   come back as "manual": the apply identity holds those roles by design.
 

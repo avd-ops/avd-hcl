@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), scripts/nerdio/preflight.py; see CREDITS.md and NOTICE.
 """Read-only readiness check before the platform stage. See docs/knowledge/readiness.md.
 
     python3 scripts/preflight.py                 checks your .avd/answers.json

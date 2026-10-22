@@ -24,6 +24,17 @@ def vm_sku(ctx):
     return ctx.cached(("sku", location, size), read)
 
 
+def restricted(sku) -> bool:
+    return any(r.get("type") == "Location" and r.get("reasonCode") == "NotAvailableForSubscription"
+               for r in sku.get("restrictions") or [])
+
+
+def usable_sku(ctx):
+    """The SKU row when the size can be used here, else None (avd.vm_size says why)."""
+    sku = vm_sku(ctx)
+    return sku if sku and not restricted(sku) else None
+
+
 def capabilities(sku) -> dict:
     # ARM leaves the list out when empty.
     return {x["name"]: x["value"] for x in sku.get("capabilities") or []}
@@ -39,8 +50,7 @@ def vm_size(ctx, c):
         return c.warn(f"couldn't look up {size} in {location}")
     if sku is False:
         return c.fail(f"{size} isn't offered in {location}", f"az vm list-skus -l {location} --size Standard_E -o table")
-    if [r for r in sku.get("restrictions") or [] if r.get("type") == "Location"
-            and r.get("reasonCode") == "NotAvailableForSubscription"]:
+    if restricted(sku):
         return c.fail(f"{size} is restricted for this subscription in {location}",
                       "Pick another size, or open a support request to lift the restriction")
     return c.ok(f"{size} is offered in {location}")
@@ -51,9 +61,9 @@ def vm_size(ctx, c):
 def vm_features(ctx, c):
     """The session-hosts module asks for Trusted Launch, Premium SSD and, by default, encryption at host."""
     size = ctx.values["vm_size"]
-    sku = vm_sku(ctx)
+    sku = usable_sku(ctx)
     if not sku:
-        return c.skip(f"needs {size} to be offered (see VM size)")
+        return c.skip(f"needs {size} to be usable here (see VM size)")
     caps = capabilities(sku)
     out = []
     if caps.get("TrustedLaunchDisabled", "False") == "True":
@@ -77,9 +87,9 @@ def vm_features(ctx, c):
        source="https://learn.microsoft.com/azure/reliability/availability-zones-region-support", reads=["az vm list-skus"])
 def zones(ctx, c):
     size, location, wanted = ctx.values["vm_size"], ctx.values["location"], [str(z) for z in ctx.values["availability_zones"]]
-    sku = vm_sku(ctx)
+    sku = usable_sku(ctx)
     if not sku:
-        return c.skip(f"needs {size} to be offered (see VM size)")
+        return c.skip(f"needs {size} to be usable here (see VM size)")
     offered = {str(z) for info in sku.get("locationInfo") or [] for z in info.get("zones") or []}
     for r in sku.get("restrictions") or []:
         if r.get("type") == "Zone":
@@ -100,11 +110,13 @@ def vcpu(ctx, c):
     hosts = int(ctx.values.get("host_count") or 0)
     if hosts == 0:
         return c.ok("no session hosts in this run")
-    sku = vm_sku(ctx)
+    sku = usable_sku(ctx)
     if not sku:
-        return c.skip(f"needs {size} to be offered in {location} (see VM size)")
+        return c.skip(f"needs {size} to be usable in {location} (see VM size)")
     vcpus = int(capabilities(sku).get("vCPUs", "0") or 0)
     family = sku.get("family")
+    if not vcpus:
+        return c.warn(f"couldn't read how many vCPUs {size} has; check quota by hand")
     need = vcpus * hosts
     usage = ctx.az(["vm", "list-usage", "-l", location])
     if usage is None or not family:
@@ -112,7 +124,7 @@ def vcpu(ctx, c):
     out = []
     for key, label in ((family, f"{family} vCPUs"), ("cores", "Total regional vCPUs")):
         row = next((u for u in usage if (u.get("name") or {}).get("value") == key), None)
-        if not row:
+        if not row or row.get("limit") is None:
             out.append(c.warn(f"no quota row for {label}"))
             continue
         free = int(row["limit"]) - int(row.get("currentValue", 0))

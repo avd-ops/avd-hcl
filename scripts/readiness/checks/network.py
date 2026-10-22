@@ -76,7 +76,14 @@ def hub(ctx, c):
         out.append(c.fail("can't read the hub VNet (wrong ID, another subscription you can't see, or no access)",
                           "Check hub_vnet_id, and ask for Network Contributor on the hub VNet"))
         return out
-    bad = [p for p in data.get("prefixes") or [] if space and space.overlaps(ipaddress.IPv4Network(p, strict=False))]
+    bad = []
+    for p in data.get("prefixes") or []:
+        try:
+            net = ipaddress.ip_network(p, strict=False)
+        except ValueError:
+            continue
+        if space and net.version == 4 and space.overlaps(net):  # a dual-stack hub has IPv6 prefixes too
+            bad.append(p)
     if bad:
         out.append(c.fail(f"{space} overlaps the hub ({', '.join(bad)}); peering would be refused",
                           "Pick an address range outside the hub's"))

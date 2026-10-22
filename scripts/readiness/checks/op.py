@@ -31,6 +31,7 @@ def version_at_least(have: str, want: str) -> bool:
 def azure_cloud(ctx, c):
     data = ctx.az(["cloud", "show", "--query", "name"])
     if not data:
+        ctx.cloud = "AzureCloud (assumed)"
         return c.warn("couldn't read the active cloud from az; assuming AzureCloud", "az cloud show")
     ctx.cloud = data
     if data == "AzureCloud":
