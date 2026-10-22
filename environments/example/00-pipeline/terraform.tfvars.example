@@ -1,0 +1,12 @@
+# scripts/pipeline/bootstrap.sh writes pipeline.auto.tfvars.json for you. This file only shows
+# the shape. Placeholders: never commit real values (docs/guardrails.md).
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+subscription_id = "00000000-0000-0000-0000-000000000000"
+name            = "avd-sbx"
+location        = "eastus2"
+environment     = "sandbox"
+github = {
+  owner      = "contoso"
+  repository = "avd-kit"
+  reviewers  = ["contoso-admin"]
+}

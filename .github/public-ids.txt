@@ -8,3 +8,7 @@
 # Intune MDM application ID, passed as mdmId to the AADLoginForWindows extension
 # https://learn.microsoft.com/azure/virtual-desktop/azure-ad-joined-session-hosts
 0000000a-0000-0000-c000-000000000000
+
+# Microsoft Graph application ID, looked up to grant the pipeline identities their Graph roles
+# https://learn.microsoft.com/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in
+00000003-0000-0000-c000-000000000000

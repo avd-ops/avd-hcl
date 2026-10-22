@@ -1,0 +1,122 @@
+# Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), .github/workflows/deploy.yml; see CREDITS.md and NOTICE.
+# Changes: the AVD platform stage, AVD_ENV, and no vendor steps.
+name: Deploy
+run-name: "${{ inputs.environment }} ${{ inputs.stage }}: ${{ inputs.apply && 'plan and apply' || 'plan' }}"
+
+# Plan, then apply after a reviewer approves (docs/knowledge/pipeline.md). Start it from the
+# Actions tab. The plan job signs in as the read-only plan identity. The apply job waits in the
+# <environment>-apply GitHub environment until a named reviewer approves, then applies exactly
+# the saved plan: its hash is checked and Terraform refuses a stale one.
+# One-time setup: scripts/pipeline/bootstrap.sh from Cloud Shell. GitHub enforces the reviewer
+# only in a public repository (or on GitHub Enterprise); until then, apply from Cloud Shell.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment?"
+        required: true
+        type: choice
+        options:
+          - sandbox
+          - dev
+          - prod
+        default: sandbox
+      stage:
+        description: "Which stage?"
+        required: true
+        type: choice
+        options:
+          - platform
+        default: platform
+      apply:
+        description: "Apply after the plan? A reviewer still has to approve it."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run per environment at a time; Terraform's state lock backs this up.
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TF_IN_AUTOMATION: "true"
+  ARM_USE_OIDC: "true"
+  STAGE: ${{ inputs.stage }}
+  AVD_ENV: ${{ inputs.environment }}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}-plan
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+      plan_blob: ${{ steps.plan.outputs.plan_blob }}
+      plan_sha256: ${{ steps.plan.outputs.plan_sha256 }}
+    # Environment secrets, so GitHub masks every ID in the logs.
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TFSTATE_RESOURCE_GROUP: ${{ secrets.TFSTATE_RESOURCE_GROUP }}
+      TFSTATE_STORAGE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+      # az signs in for group lookups and the plan upload; Terraform gets its own OIDC tokens.
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Plan
+        id: plan
+        run: ./scripts/pipeline/stage.sh plan
+
+  apply:
+    name: Apply
+    needs: plan
+    if: inputs.apply && needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-latest
+    # The gate: GitHub holds this job until a reviewer approves, and only then issues the token
+    # the apply identity trusts.
+    environment: ${{ inputs.environment }}-apply
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      TFSTATE_RESOURCE_GROUP: ${{ secrets.TFSTATE_RESOURCE_GROUP }}
+      TFSTATE_STORAGE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
+      PLAN_BLOB: ${{ needs.plan.outputs.plan_blob }}
+      PLAN_SHA256: ${{ needs.plan.outputs.plan_sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.6"
+          terraform_wrapper: false
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Apply
+        run: ./scripts/pipeline/stage.sh apply

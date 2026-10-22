@@ -6,6 +6,8 @@ terraform.tfvars
 # Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
 backend.hcl
 *.backend.hcl
+# The pipeline stage starts on local state; bootstrap.sh writes its backend.tf after the first apply.
+environments/*/00-pipeline/backend.tf
 *.tfplan
 tfplan
 
@@ -16,6 +18,9 @@ tfplan
 .terraform.tfstate.lock.info
 crash.log
 packer_cache/
+
+# Your schema answers (scripts/schema/answers.py init). No secrets, but they name your groups.
+/.avd/
 
 # Operator output (reports, readiness results, evidence bundles)
 /output/

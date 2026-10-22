@@ -19,7 +19,9 @@ The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is 
 | `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts, and run-secrets for the values that never touch state. Each has `tests/` for `terraform test`, except run-secrets, tested through the root |
 | `environments/example/01-platform/` | The platform root that wires the modules together; copy it per environment |
 | `schema/parameters.json` | The one list of deployment parameters behind every front door |
-| `scripts/schema/` | The schema check CI runs |
+| `scripts/schema/` | The schema check CI runs, and `answers.py` (`init` asks the questions, `render` writes the tfvars) |
+| `modules/deploy-pipeline/`, `environments/example/00-pipeline/` | The gated pipeline: state storage, plan and apply identities, GitHub environments |
+| `scripts/pipeline/` | `bootstrap.sh` (one-time setup from Cloud Shell) and `stage.sh` (what the Deploy workflow runs) |
 
 ## Try it offline
 
@@ -27,8 +29,8 @@ From Cloud Shell, with no Azure changes (mock providers only):
 
 ```bash
 git clone https://github.com/nickprignano/avd-hcl.git && cd avd-hcl
-for d in modules/*/ environments/example/01-platform/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
-python3 scripts/schema/check.py
+for d in modules/*/ environments/example/*/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
+python3 scripts/schema/check.py && python3 -m unittest discover -s scripts/schema
 ```
 
 ## Where it comes from

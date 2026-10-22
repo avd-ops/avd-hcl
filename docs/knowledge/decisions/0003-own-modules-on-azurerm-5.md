@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-21
 decision-makers: [owner]
 ---
@@ -34,10 +34,10 @@ workspace 0.3.0, scalingplan 0.3.0):
 
 ## Decision Outcome
 
-Proposed: "Own thin modules on azurerm 5", because it keeps one provider version across the
+Chosen: "Own thin modules on azurerm 5", because it keeps one provider version across the
 kit, needs no telemetry provider, and the AVD resources are small enough that a module is a thin
-layer over the azurerm resources. Proposed with phase 1; it becomes accepted when the owner merges
-the pull request that brings it.
+layer over the azurerm resources. Accepted when the owner merged phase 1 (pull request #10,
+2026-10-21).
 
 - Each module follows the landing zone's Bicep module of the same role, with a source header and
   a CREDITS row, and carries its lessons as `terraform test` runs.
