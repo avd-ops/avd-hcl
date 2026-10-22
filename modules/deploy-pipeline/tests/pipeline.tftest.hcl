@@ -207,6 +207,25 @@ run "assignable_roles_never_include_owner" {
   expect_failures = [var.apply_assignable_roles]
 }
 
+run "plan_identity_cannot_write_state" {
+  command = plan
+
+  assert {
+    condition     = !contains(keys(azurerm_role_assignment.state_data), "plan") && azurerm_role_assignment.plan_state_read.role_definition_name == "Storage Blob Data Reader"
+    error_message = "The plan identity only reads state and answers."
+  }
+}
+
+run "apply_roles_never_include_owner" {
+  command = plan
+
+  variables {
+    apply_roles = ["Owner"]
+  }
+
+  expect_failures = [var.apply_roles]
+}
+
 run "apply_graph_roles_stay_read_only" {
   command = plan
 

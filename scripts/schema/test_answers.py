@@ -93,10 +93,21 @@ class AnswersTest(unittest.TestCase):
 
     def test_render_writes_the_output_file(self):
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "01-platform").mkdir()
             written = answers.render(self.schema, {"user_groups": [USERS]}, Path(d), source=source, group=group)
             self.assertEqual([p.name for p in written], ["setup.auto.tfvars.json"])
             self.assertEqual(json.loads(written[0].read_text())["host_count"], 1)
+
+    def test_render_pins_the_environment(self):
+        with tempfile.TemporaryDirectory() as d:
+            written = answers.render(self.schema, {"user_groups": [USERS]}, Path(d), "dev", source=source, group=group)
+            out = json.loads(written[0].read_text())
+            self.assertEqual((out["environment"], out["prefix"]), ("dev", "avd-dev"))
+            with self.assertRaisesRegex(answers.AnswerError, "this run deploys dev"):
+                answers.render(self.schema, {"user_groups": [USERS], "environment": "sandbox"}, Path(d), "dev", source=source, group=group)
+
+    def test_min_length_alone_is_a_message_not_a_crash(self):
+        p = {"id": "x", "type": "string", "min_length": 3}
+        self.assertEqual(answers.validate(p, "ab"), ["x: must be 3 to any number of characters"])
 
     def test_init_saves_only_what_was_typed(self):
         replies = iter(["", "1", "", "", "", "AVD Users", "", "3", "", "", ""])

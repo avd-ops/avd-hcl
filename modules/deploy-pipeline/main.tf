@@ -117,16 +117,30 @@ resource "azurerm_storage_management_policy" "plans" {
   }
 }
 
-# You keep data access too, so you can move state in from Cloud Shell and inspect it.
+# You keep data access too, so you can move state in from Cloud Shell and inspect it. The apply
+# identity writes state. The plan identity, which needs no approval, only reads state and answers
+# and writes nothing but its own results in the plans container, so it can't tamper with what
+# the next reviewed apply acts on.
 resource "azurerm_role_assignment" "state_data" {
   for_each = {
     deployer = data.azurerm_client_config.current.object_id
-    plan     = local.identities.plan.principal_id
     apply    = local.identities.apply.principal_id
   }
   scope                = azurerm_storage_account.state.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = each.value
+}
+
+resource "azurerm_role_assignment" "plan_state_read" {
+  scope                = azurerm_storage_account.state.id
+  role_definition_name = "Storage Blob Data Reader"
+  principal_id         = local.identities.plan.principal_id
+}
+
+resource "azurerm_role_assignment" "plan_results" {
+  scope                = azurerm_storage_container.this["plans"].id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = local.identities.plan.principal_id
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -163,8 +177,9 @@ resource "azurerm_role_assignment" "plan" {
 # (registration_token_hours), so anyone who can merge to the deploy branch and start a plan could
 # read it. Turn it off with plan_reads_registration_token = false and plan with no new hosts.
 resource "azurerm_role_definition" "registration_token" {
-  count       = var.plan_reads_registration_token ? 1 : 0
-  name        = "AVD kit registration token reader (${var.name})"
+  count = var.plan_reads_registration_token ? 1 : 0
+  # Role names are unique across the tenant, so the subscription is part of it.
+  name        = "AVD kit registration token reader (${var.name}, ${substr(sha1(var.subscription_id), 0, 6)})"
   scope       = local.subscription_scope
   description = "Reads AVD host pool registration tokens, for the deploy pipeline's plan identity. Nothing else."
 

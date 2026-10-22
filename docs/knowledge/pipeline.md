@@ -32,8 +32,8 @@ State lives at `avd/<env>/<stage>.tfstate`. Saved plans expire after 7 days.
 
 | Identity | Azure | Microsoft Graph | Trusted token |
 |---|---|---|---|
-| plan | Reader on the subscription, plus a custom role with only `retrieveRegistrationToken` | `Application.Read.All`, `Group.Read.All` | `repo:<owner>/<repo>:environment:<env>-plan`, from `main` only |
-| apply | Contributor, and Role Based Access Control Administrator limited by a condition to the seven roles the platform stage assigns | `Application.Read.All` | `repo:<owner>/<repo>:environment:<env>-apply`, from `main` only, after approval |
+| plan | Reader on the subscription, plus a custom role with only `retrieveRegistrationToken`. Reads state and answers; writes only the `plans` container | `Application.Read.All`, `Group.Read.All` | `repo:<owner>/<repo>:environment:<env>-plan`, from `main` only |
+| apply | Contributor, and Role Based Access Control Administrator limited by a condition to the seven roles the platform stage assigns (Owner is refused). Writes state | `Application.Read.All` | `repo:<owner>/<repo>:environment:<env>-apply`, from `main` only, after approval |
 | you (bootstrap) | Owner, or Contributor plus Role Based Access Control Administrator, once | Privileged Role Administrator through PIM, once, to grant the Graph roles | none |
 
 Changes from nerdio-hcl's identities: the platform stage creates no Entra objects, so both Graph
@@ -60,6 +60,22 @@ login, Key Vault Secrets User, the two SMB share roles); Contributor is not assi
   custom role with that one action. The trade: anyone who can merge to `main` and start a plan
   could read a token that registers a machine until it expires (`registration_token_hours`).
   `plan_reads_registration_token = false` removes the role.
+- **The plan identity can't touch what the apply acts on.** It needs no approval, so it only
+  reads state and answers. That means it can't take the state lock (a blob lease is a write), so
+  plans run with `-lock=false`: the workflow's concurrency group runs one job per environment,
+  and Terraform refuses a saved plan whose state moved since.
+- **The answers can't pick another environment.** `render --environment <env>` refuses answers
+  whose `environment` differs from the one the run deploys, so a dev run can't plan sandbox's
+  names under dev's state.
+- **One folder, several environments.** `00-pipeline` keeps a working folder
+  (`TF_DATA_DIR=.terraform-<env>`), a variables file and a backend (`backend_override.tf`,
+  local first, then the new storage) per environment, all git-ignored, so bootstrapping dev never
+  plans against sandbox's state. The storage each environment uses is remembered in
+  `~/.config/avd-hcl/<env>.json` with its tenant and subscription.
+- **Custom role names are unique across the tenant,** so the token role's name carries the
+  subscription's hash as well as the pipeline name.
+- **`-input=false` cancels an apply.** With it Terraform can't ask for yes, so `bootstrap.sh`
+  leaves it off the one apply a person confirms.
 - **A storage account name is 24 characters at most.** The pipeline's is
   `st<name without hyphens>tf<6 hex>`, so `name` follows the platform prefix rule (2 to 13
   characters), not nerdio-hcl's 15.

@@ -87,6 +87,14 @@ variable "apply_roles" {
   type        = list(string)
   nullable    = false # null (from the stage) means this default
   default     = ["Contributor", "Role Based Access Control Administrator"]
+
+  # Only the two role-administrator roles carry the condition, so a role that can write role
+  # assignments without it (Owner) would undo the constraint. A custom role with
+  # roleAssignments/write would too; don't add one.
+  validation {
+    condition     = !contains(var.apply_roles, "Owner")
+    error_message = "Owner would let the apply identity assign any role, past the condition; use Contributor plus Role Based Access Control Administrator."
+  }
 }
 
 variable "apply_assignable_roles" {

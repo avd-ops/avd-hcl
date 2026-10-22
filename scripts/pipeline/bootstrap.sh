@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), scripts/pipeline/bootstrap.sh; see CREDITS.md and NOTICE.
 # Changes: no repository-settings module, answers from scripts/schema/answers.py, a stop before a
-# private repository where GitHub wouldn't enforce the reviewer, and a simpler --adopt.
+# private repository where GitHub wouldn't enforce the reviewer, one state and working folder per
+# environment, and a simpler --adopt.
 #
 # One-time setup for the deploy pipeline, from Azure Cloud Shell (Bash).
 #
@@ -20,7 +21,8 @@
 #   AVD_ENV        kit environment (default sandbox). The first run saves this tenant and
 #                  subscription for it; later runs stop if you're signed in somewhere else.
 #   AVD_LOCATION   region for the state storage (default eastus2)
-#   AVD_NAME       short name for the pipeline's resources (default avd-<first 3 of env>)
+#   AVD_NAME       short name for the pipeline's resources (default avd-sbx, avd-dev, avd-prd,
+#                  or avd-<env> for other environments of up to 9 characters)
 #   AVD_REVIEWERS  comma-separated GitHub logins who may approve applies (default: you)
 #   AVD_GITHUB_ENTERPRISE=1  only on GitHub Enterprise, where a private repository's
 #                  environments enforce reviewers
@@ -39,8 +41,19 @@ case "$mode" in apply | --plan | --answers-only | --adopt) ;; *) echo "usage: $0
 env_name="${AVD_ENV:-sandbox}"
 [[ "$env_name" =~ ^[a-z][a-z0-9-]{1,20}$ ]] || { echo "AVD_ENV must be lowercase letters, digits or hyphens" >&2; exit 64; }
 location="${AVD_LOCATION:-eastus2}"
-name="${AVD_NAME:-avd-${env_name:0:3}}"
+case "$env_name" in
+  sandbox) short=sbx ;;
+  prod) short=prd ;;
+  *) short="$env_name" ;;
+esac
+name="${AVD_NAME:-avd-$short}"
+[ "${#name}" -le 13 ] || { echo "$name is too long for the pipeline's names; set AVD_NAME (2 to 13 characters)" >&2; exit 64; }
 config="${XDG_CONFIG_HOME:-$HOME/.config}/avd-hcl/$env_name.json"
+
+# Every environment shares the 00-pipeline folder, so each keeps its own Terraform working
+# directory, variables and backend: one environment's run never sees another's state.
+export TF_DATA_DIR="$stage/.terraform-$env_name"
+vars="$stage/$env_name.pipeline.tfvars.json"
 
 say() { printf '\n== %s\n' "$*"; }
 
@@ -83,7 +96,23 @@ ensure_terraform() {
   export PATH="$HOME/bin:$PATH"
 }
 
+# backend_override.tf (git-ignored) is rewritten for the chosen environment before every
+# Terraform call: local state until the storage exists, then that storage.
+write_backend() {
+  local rg sa
+  rg="$(jq -r '.storage_resource_group // empty' "$config")"
+  sa="$(jq -r '.storage_account // empty' "$config")"
+  if [ -z "$sa" ]; then
+    printf '# Written by scripts/pipeline/bootstrap.sh for %s. Git-ignored.\nterraform {\n  backend "local" {\n    path = ".state/%s.tfstate"\n  }\n}\n' \
+      "$env_name" "$env_name" > "$stage/backend_override.tf"
+  else
+    printf '# Written by scripts/pipeline/bootstrap.sh for %s. Git-ignored.\nterraform {\n  backend "azurerm" {\n    resource_group_name  = "%s"\n    storage_account_name = "%s"\n    container_name       = "tfstate"\n    key                  = "avd/%s/pipeline.tfstate"\n    use_azuread_auth     = true\n  }\n}\n' \
+      "$env_name" "$rg" "$sa" "$env_name" > "$stage/backend_override.tf"
+  fi
+}
+
 pipeline_output() { terraform -chdir="$stage" output -raw "$1"; }
+stored() { jq -r ".$1" "$config"; } # the storage this environment's pipeline uses
 
 # Role assignments take a minute or two to reach the data plane, so storage steps retry.
 retry() { # $1 what, then the command
@@ -97,28 +126,20 @@ retry() { # $1 what, then the command
   return 1
 }
 
-# Moves this stage's local state into the storage account it just created. backend.tf is
-# git-ignored and holds names only.
+# Moves this environment's local state into the storage account it just created, and remembers
+# that storage for later runs.
 migrate_pipeline_state() {
   local rg sa
   rg="$(pipeline_output resource_group_name)"
   sa="$(pipeline_output storage_account_name)"
-  cat > "$stage/backend.tf" <<TF
-# Written by scripts/pipeline/bootstrap.sh. Git-ignored.
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "$rg"
-    storage_account_name = "$sa"
-    container_name       = "tfstate"
-    key                  = "avd/$env_name/pipeline.tfstate"
-    use_azuread_auth     = true
-  }
-}
-TF
+  jq --arg rg "$rg" --arg sa "$sa" '.storage_resource_group = $rg | .storage_account = $sa' "$config" > "$config.new"
+  mv "$config.new" "$config"
+  write_backend
   if retry "state" terraform -chdir="$stage" init -input=false -migrate-state -force-copy >/dev/null; then
     echo "00-pipeline: state is now in the pipeline's storage (avd/$env_name/pipeline.tfstate)"
   else
-    rm -f "$stage/backend.tf"
+    jq 'del(.storage_resource_group, .storage_account)' "$config" > "$config.new" && mv "$config.new" "$config"
+    write_backend
     echo "Couldn't move the state; it's still local and unchanged. Run $0 again in a few minutes." >&2
     exit 1
   fi
@@ -133,11 +154,10 @@ publish_answers() {
   # Check them here, so a mistake shows now instead of in the first plan.
   local check
   check="$(mktemp -d)"
-  mkdir -p "$check/01-platform"
-  python3 "$root/scripts/schema/answers.py" render --file "$file" --env-dir "$check" >/dev/null \
+  python3 "$root/scripts/schema/answers.py" render --file "$file" --env-dir "$check" --environment "$env_name" >/dev/null \
     || { rm -rf "$check"; echo "Fix the answers above, then run $0 --answers-only." >&2; exit 1; }
   rm -rf "$check"
-  sa="$(pipeline_output storage_account_name)"
+  sa="$(stored storage_account)"
   if retry "answers" az storage blob upload --auth-mode login --only-show-errors --account-name "$sa" \
     --container-name answers --name "$env_name.json" --file "$file" --overwrite >/dev/null 2>&1; then
     echo "Published your answers for $env_name"
@@ -150,9 +170,10 @@ publish_answers() {
 say "Environment $env_name"
 check_account
 ensure_terraform
+write_backend
 
 if [ "$mode" = --answers-only ] || [ "$mode" = --adopt ]; then
-  pipeline_output storage_account_name >/dev/null 2>&1 \
+  jq -e '.storage_account' "$config" >/dev/null 2>&1 \
     || { echo "Run $0 first; the pipeline's storage doesn't exist yet." >&2; exit 2; }
 fi
 
@@ -167,7 +188,7 @@ if [ "$mode" = --adopt ]; then
   echo "Don't run this while a plan or apply is running for $env_name."
   umask 077
   printf 'resource_group_name  = "%s"\nstorage_account_name = "%s"\ncontainer_name       = "tfstate"\nkey                  = "avd/%s/platform.tfstate"\nuse_azuread_auth     = true\n' \
-    "$(pipeline_output resource_group_name)" "$(pipeline_output storage_account_name)" "$env_name" > "$platform/pipeline.backend.hcl"
+    "$(stored storage_resource_group)" "$(stored storage_account)" "$env_name" > "$platform/pipeline.backend.hcl"
   retry "state" terraform -chdir="$platform" init -input=false -migrate-state -force-copy -backend-config=pipeline.backend.hcl >/dev/null \
     || { echo "Couldn't move the state; it's unchanged. Run $0 --adopt again in a few minutes." >&2; exit 1; }
   echo "01-platform: state is now in avd/$env_name/platform.tfstate"
@@ -208,20 +229,21 @@ jq -n \
   --arg owner "$owner" --arg repo "$repo" --arg reviewers "$reviewers" --argjson enterprise "$enterprise" \
   '{tenant_id: $tenant, subscription_id: $sub, name: $name, location: $location, environment: $env,
     github: {owner: $owner, repository: $repo, enterprise: $enterprise,
-             reviewers: ($reviewers | split(",") | map(gsub("^\\s+|\\s+$"; "")))}}' > "$stage/pipeline.auto.tfvars.json"
-echo "Wrote 00-pipeline/pipeline.auto.tfvars.json (git-ignored)"
+             reviewers: ($reviewers | split(",") | map(gsub("^\\s+|\\s+$"; "")))}}' > "$vars"
+echo "Wrote 00-pipeline/$(basename "$vars") (git-ignored)"
 
 say "00-pipeline: terraform"
 GITHUB_TOKEN="$(gh auth token)"
 export GITHUB_TOKEN
 terraform -chdir="$stage" init -input=false >/dev/null
 case "$mode" in
-  --plan) terraform -chdir="$stage" plan -input=false; exit 0 ;;
-  *) terraform -chdir="$stage" apply -input=false ;;
+  --plan) terraform -chdir="$stage" plan -input=false -var-file="$vars"; exit 0 ;;
+  # No -input=false here: Terraform asks you to type yes before it changes anything.
+  *) terraform -chdir="$stage" apply -var-file="$vars" ;;
 esac
 unset GITHUB_TOKEN
 
-[ -f "$stage/backend.tf" ] || { say "Moving this stage's state into the new storage"; migrate_pipeline_state; }
+jq -e '.storage_account' "$config" >/dev/null 2>&1 || { say "Moving this environment's state into the new storage"; migrate_pipeline_state; }
 
 say "Answers"
 publish_answers

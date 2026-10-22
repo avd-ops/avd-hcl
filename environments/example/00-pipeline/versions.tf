@@ -18,8 +18,8 @@ terraform {
     }
   }
 
-  # scripts/pipeline/bootstrap.sh starts with local state, then moves it into the storage account
-  # this stage creates, by writing backend.tf (git-ignored). See backend.tf.example.
+  # No backend here: scripts/pipeline/bootstrap.sh writes backend_override.tf (git-ignored) for the
+  # chosen environment, local state first, then the storage account this stage creates.
 }
 
 provider "azurerm" {

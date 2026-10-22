@@ -137,7 +137,7 @@ def validate(p, v):
         if "pattern" in p and not re.fullmatch(p["pattern"], v):
             errs.append(f"{pid}: '{v}' doesn't match {p['pattern']}")
         if len(v) < p.get("min_length", 0) or len(v) > p.get("max_length", len(v)):
-            errs.append(f"{pid}: must be {p.get('min_length', 0)} to {p['max_length']} characters")
+            errs.append(f"{pid}: must be {p.get('min_length', 0)} to {p.get('max_length', 'any number of')} characters")
     return errs
 
 
@@ -223,11 +223,22 @@ def stage_dirs(schema, env_dir):
     return {stage: env_dir / Path(folder).name for stage, folder in schema["stages"].items()}
 
 
-def render(schema, answers, env_dir, **lookups):
-    values = resolve(schema, answers, **lookups)
+def pin_environment(answers, environment):
+    """The deploy workflow names the environment; the answers must agree with it."""
+    if environment is None:
+        return answers
+    given = answers.get("environment", environment)
+    if given != environment:
+        raise AnswerError(f"environment: the answers say {given}, but this run deploys {environment}")
+    return {**answers, "environment": environment}
+
+
+def render(schema, answers, env_dir, environment=None, **lookups):
+    values = resolve(schema, pin_environment(answers, environment), **lookups)
     written = []
     for stage, data in tfvars(schema, values).items():
         path = stage_dirs(schema, env_dir)[stage] / schema["output_file"]
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(data, indent=2) + "\n")
         written.append(path)
     return written
@@ -288,6 +299,7 @@ def main(argv=None):
     r = sub.add_parser("render", help="write each stage's setup.auto.tfvars.json")
     r.add_argument("--file", type=Path, default=DEFAULT_ANSWERS)
     r.add_argument("--env-dir", type=Path, default=ROOT / "environments" / "example")
+    r.add_argument("--environment", help="the environment this run deploys; the answers must match it")
     args = ap.parse_args(argv)
     schema = json.loads(SCHEMA.read_text())
 
@@ -303,7 +315,7 @@ def main(argv=None):
         print(f"No answers at {args.file}. Run init first.", file=sys.stderr)
         return 2
     try:
-        written = render(schema, json.loads(args.file.read_text()), args.env_dir)
+        written = render(schema, json.loads(args.file.read_text()), args.env_dir, args.environment)
     except AnswerError as e:
         for line in str(e).splitlines():
             print(f"x {line}", file=sys.stderr)

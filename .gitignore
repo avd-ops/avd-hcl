@@ -6,8 +6,12 @@ terraform.tfvars
 # Backend settings for terraform init -backend-config (the backend block itself is committed, empty).
 backend.hcl
 *.backend.hcl
-# The pipeline stage starts on local state; bootstrap.sh writes its backend.tf after the first apply.
-environments/*/00-pipeline/backend.tf
+# The pipeline stage keeps one working folder, variables and backend per environment
+# (scripts/pipeline/bootstrap.sh writes them).
+environments/*/00-pipeline/backend_override.tf
+environments/*/00-pipeline/.terraform-*/
+environments/*/00-pipeline/.state/
+environments/*/00-pipeline/*.pipeline.tfvars.json
 *.tfplan
 tfplan
 

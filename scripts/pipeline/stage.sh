@@ -23,7 +23,7 @@
 #   ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_ID
 #   TFSTATE_RESOURCE_GROUP TFSTATE_STORAGE_ACCOUNT
 #   PLAN_BLOB PLAN_SHA256    apply only: from the plan job
-set -euo pipefail
+set -Eeuo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 action="${1:-}"
@@ -59,6 +59,7 @@ blob() { # $1 upload|download, $2 container, $3 blob name, $4 file, then any ext
 }
 
 fail() {
+  trap - ERR
   echo "::error::$*" | redact
   local tail=""
   [ -n "$log" ] && [ -f "$log" ] && tail="$(grep -v '^\s*$' "$log" | tail -n 30 | redact)"
@@ -67,6 +68,9 @@ fail() {
   blob upload plans "$result_blob" "$work/failed.json" --overwrite 2>/dev/null || true
   exit 1
 }
+
+# Any step that fails without saying why still leaves a result.
+trap 'fail "Step failed at line $LINENO: $BASH_COMMAND"' ERR
 
 # The stage's backend block is committed empty; the settings come from here.
 init_stage() {
@@ -86,16 +90,17 @@ if [ "$action" = plan ]; then
     || fail "No answers for $AVD_ENV yet. Run scripts/pipeline/bootstrap.sh --answers-only from Cloud Shell."
   # Tenant and subscription come from ARM_*; group names are looked up with the plan identity.
   log="$work/render.log"
-  python3 "$root/scripts/schema/answers.py" render > "$log" 2>&1 || { redact < "$log"; fail "The answers don't pass the schema"; }
+  python3 "$root/scripts/schema/answers.py" render --environment "$AVD_ENV" > "$log" 2>&1 || { redact < "$log"; fail "The answers don't pass the schema"; }
   redact < "$log"
 
   echo "== $dir_name: terraform plan"
   init_stage
-  set +e
   log="$work/plan.log"
-  terraform -chdir="$stage_dir" plan -input=false -no-color -lock-timeout=5m -detailed-exitcode -out="$work/tfplan" > "$log" 2>&1
-  code=$?
-  set -e
+  # The plan identity can read state but not write it, so it can't take the state lock. The
+  # workflow's concurrency group runs one job per environment, and Terraform refuses to apply a
+  # saved plan whose state has moved since. Exit code 2 means changes, so it's caught here.
+  code=0
+  terraform -chdir="$stage_dir" plan -input=false -no-color -lock=false -detailed-exitcode -out="$work/tfplan" > "$log" 2>&1 || code=$?
   if [ "$code" = 1 ]; then
     grep -v '^\s*$' "$log" | tail -n 40 | redact
     fail "terraform plan failed"
@@ -158,10 +163,8 @@ echo "== $dir_name: terraform apply"
 init_stage
 # A plan goes stale if the state moved since it was made; Terraform then refuses to apply it.
 log="$work/apply.log"
-set +e
-terraform -chdir="$stage_dir" apply -input=false -no-color -lock-timeout=5m "$work/tfplan" > "$log" 2>&1
-code=$?
-set -e
+code=0
+terraform -chdir="$stage_dir" apply -input=false -no-color -lock-timeout=5m "$work/tfplan" > "$log" 2>&1 || code=$?
 redact < "$log"
 [ "$code" = 0 ] || fail "terraform apply failed"
 { echo "## $AVD_ENV / $dir_name"; echo; echo "Applied the reviewed plan."; } | summary
