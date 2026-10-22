@@ -79,9 +79,10 @@ jobs:
           set -uo pipefail
           fail=0
           # Code only: docs may name Nerdio as prior art, and a file adapted from nerdio-hcl names it in
-          # its credit header (decision 0002). This workflow is excluded because it holds the pattern.
+          # its credit header (decision 0002): the whole line must be that header, so nothing else can
+          # ride on it. This workflow is excluded because it holds the pattern.
           if git grep -niE 'nerdio' -- '*.tf' '*.tf.json' '*.hcl' '*.sh' '*.ps1' '*.psm1' '*.py' '*.yml' '*.yaml' ':!.github/workflows/ci.yml' \
-            | grep -vE '^[^:]+:[0-9]+:(# )?(Adapted from|From) nerdio-hcl \(Apache-2\.0, commit [0-9a-f]+\)'; then
+            | grep -vE '^[^:]+:[0-9]+:(# )?(Adapted from|From) nerdio-hcl \(Apache-2\.0, commit [0-9a-f]+\), [A-Za-z0-9_./-]+;( see CREDITS\.md( and NOTICE)?\.)?$'; then
             echo "::error::No Nerdio provider, API or tool in the kit's code (CLAUDE.md)."
             fail=1
           fi

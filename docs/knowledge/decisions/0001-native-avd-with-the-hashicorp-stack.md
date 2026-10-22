@@ -25,7 +25,9 @@ Chosen option: "Its own repo" (this one), because no AVD repo, lane rule or guar
 and avd-landing-zone and avd-current-state stay a self-contained pair that never depends on it.
 
 - Scope: Terraform for the estate, Packer for images, Vault or OpenBao where a secret store is
-  needed. Ansible only if a later decision record shows HCL can't do the job.
+  needed (narrowed by [0004](0004-hashicorp-community-editions.md): no Vault server; Azure Key
+  Vault holds secrets). Ansible only if a
+  later decision record shows HCL can't do the job.
 - No Nerdio in the path: Terraform owns host pools, app groups, workspaces, scaling plans and
   session hosts directly.
 - The earlier Bicep lab kit is removed from main; it stays in git history at `de2b9bc`, and its

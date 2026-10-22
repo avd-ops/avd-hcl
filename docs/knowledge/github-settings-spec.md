@@ -24,8 +24,9 @@ Azure resource or credential changes until the owner says yes to each step in se
   itself breaks. It has no apply step, and the plan job's credentials can't change settings even
   if someone added one. The issue job's own token can write issues and labels, and nothing else
   (section 9).
-- Applying is always you, in Cloud Shell, with a short-lived write token you create for that run.
-  That is an exception to guardrail 6 and ai-brain 0016 step 3, flagged in Q5.
+- Applying is always you, in Cloud Shell, signed in to Azure as yourself: Key Vault signs for a
+  short-lived write token with a key only your account may use (section 8). Before that key
+  exists, the first apply uses a fine-grained token you create for the run and revoke after.
 - The conventions are written down once (`github/conventions.md`) so your other HCL repository,
   nerdio-hcl, can be kept the same from its own project (section 7).
 
@@ -59,16 +60,22 @@ github/
                              use_oidc on (Reader can't list storage keys); values from -backend-config
     versions.tf              integrations/github pinned; provider "github" { owner = "nickprignano" },
                              token from GITHUB_TOKEN in the environment
-  bootstrap/                 the small Azure piece the drift check needs (section 8), local state, then migrated
-  scripts/app-token.py       mints a read-only installation token from a Key Vault-signed JWT
+  bootstrap/                 the small Azure piece (Key Vault, state container, identity; section 8)
+  scripts/app_token.py       mints an installation token from a JWT signed by Key Vault
   conventions.md             the settings table in section 5, with where each one comes from
 ```
 
+- **One owner per setting.** GitHub environments (the kit's `<env>-plan` and `<env>-apply`, their
+  branch policies, reviewers and environment secrets) belong to the kit's deploy pipeline
+  (`environments/example/00-pipeline`, port plan phase 2), never to `github/`. `github/` owns
+  everything else in section 4, and the pipeline module touches none of it. Required reviewers on
+  environments in a private repository need GitHub Enterprise (environments and branch policies
+  need Pro), which matters for that pipeline while this repo is private.
 - `github/` never shares state, variables or providers with `environments/`. The kit's roots
   never reference `github/`, and `github/` never reads the kit's state.
 - Provider: `integrations/github`, pinned to the release current at build time (`~> 6.x`), and
   Terraform pinned to the version CI uses once PR #10 merges (1.16.6; `main` has 1.11.4 today). Nothing in `github/` uses a feature
-  OpenTofu lacks, so the folder also runs under `tofu` (section 10).
+  OpenTofu lacks, but the tool is Terraform Community Edition (decision 0004, section 10).
 - `prevent_destroy` on the repository resource and `archive_on_destroy = true`: a
   `github_repository` destroy deletes the repository, so neither a typo nor `terraform destroy`
   can do that. Retiring this setup uses `removed { lifecycle { destroy = false } }` blocks, which
@@ -114,7 +121,7 @@ Anything marked **proposed here** has no source in those decisions and is for yo
 | Projects | off | proposed here (the personal board is a user-level project, not a repo tab) |
 | Forking | left as is | private repos of a personal account can't change it; the argument is omitted |
 | Topics | `azure-virtual-desktop`, `terraform`, `packer`, `azure`, `infrastructure-as-code` | proposed here (Q8) |
-| Description | "Native Azure Virtual Desktop with Terraform, Packer and Vault" | proposed here: today's text describes the removed lab kit |
+| Description | "Native Azure Virtual Desktop with Terraform and Packer" | proposed here: today's text describes the removed lab kit |
 
 ## 6. Import first, then plan
 
@@ -153,72 +160,66 @@ spec manages avd-hcl only and nothing here reads or writes nerdio-hcl.
 - One repository's settings never have two owners: whatever manages nerdio-hcl's settings stays
   in that repository's project.
 
-## 8. Credentials (no long-lived token anywhere, per 0016)
+## 8. Credentials (no long-lived token anywhere, per 0016; Key Vault holds the keys)
 
-**Drift check (CI, read-only): a GitHub App whose private key never leaves Azure Key Vault.**
+No Vault server (decision 0004). Both GitHub App keys are **non-exportable Azure Key Vault keys
+with only the `sign` operation**: they can sign, but nobody can read them back, so no credential
+exists outside Key Vault and nobody, Claude included, ever holds one. This is the pattern
+nerdio-hcl's setup chat uses for its GitHub App (`assistant/pipeline.py`), reused with credit.
 
-- Why an App at all: the workflow's own `GITHUB_TOKEN` has no `administration` scope, so it can't
-  read rulesets' enforcement details, security settings or workflow permissions.
-- A private GitHub App, "avd-hcl settings reader", installed on this repository only. Repository permissions: **Administration: read** (merge settings,
-  rulesets, security settings, Dependabot, workflow permissions), **Issues: read** (labels),
-  **Metadata: read** (required). Nothing else: no write permission, no webhook.
-- Its private key is imported into a Key Vault as a **non-exportable key with only the `sign`
-  operation**, then the downloaded file is deleted. Nobody can read the key back, including the
-  workflow; it can only ask Key Vault to sign a 9-minute JWT, which GitHub exchanges for a
-  one-hour installation token **scoped to this repository and those read permissions**. The token
-  is masked in logs and passed to Terraform as `GITHUB_TOKEN` for that one job. This is the same
-  pattern nerdio-hcl's setup chat uses for its GitHub App (`assistant/pipeline.py`), reused with
-  credit.
-- The workflow reaches Key Vault through OIDC: a user-assigned managed identity with one federated
-  credential for the subject `repo:nickprignano/avd-hcl:ref:refs/heads/main`, so only a run of
-  `main`'s workflow code gets it; a dispatch from any other branch fails to sign in. It holds
-  **Key Vault Crypto User** on that one key and **Storage Blob Data Reader** on the state
-  container. Its client, tenant and subscription IDs are repository *variables* (`vars.*`), not
-  secrets, and are never in the repo.
-- No GitHub environment is needed: the subject pins `main`, which is what an environment limited
-  to `main` would do, and it works without GitHub Pro on a private repo. There is no reviewer:
-  one would hold every scheduled run, and these credentials can't change settings. 0016 asks for a
-  reviewer on *deploy* credentials only (Q4).
+**Why an App at all:** the workflow's own `GITHUB_TOKEN` has no `administration` scope, so it
+can't read rulesets' details, security settings or workflow permissions.
 
-**Apply (you, in Cloud Shell): a fine-grained token you create for the run and revoke after.**
+**Two private GitHub Apps, installed on this repository only, no webhook:**
 
-- Fine-grained personal access token, **only this repository**, expiry the next day, permissions
-  **Administration: read and write**, **Issues: read and write**, **Metadata: read**. You type it
-  with `read -rs GITHUB_TOKEN` in Cloud Shell, so it is never in a file, history, chat or the
-  repo; you revoke it on GitHub after the apply.
-- This is an **exception, flagged for you (Q5)**: guardrail 6 says applies run after a named
-  reviewer approves them, and 0016 step 3 puts an unavoidable deploy token in an environment
-  secret with a reviewer and a vault entry. Here the reviewer and the person applying are both
-  you, there is no stored token to put in a vault, and "a session never applies" is a rule, not a
-  check (0016 step 6). Alternatives: (a) an `apply` workflow in an environment with you as
-  required reviewer (needs Pro while private, and a write credential that CI can reach, which this
-  spec otherwise avoids); (b) a second "settings writer" App whose key sits in Key Vault, signable
-  only by your own Entra account: keyless, no token to create each time, more setup. Q11 covers
-  0016's planned separate GitHub account for sessions, which would turn the rule into a check.
+| App | Repository permissions | Who may ask Key Vault to sign with its key |
+|---|---|---|
+| settings reader | **Administration: read**, **Issues: read** (labels), **Metadata: read** | the drift workflow's managed identity, from `main` only |
+| settings writer | **Administration: read and write**, **Issues: read and write**, **Metadata: read** | your own Entra account, from Cloud Shell |
+
+**How a run gets a token:**
+
+1. It signs in to Azure: the drift workflow by GitHub OIDC as a user-assigned managed identity
+   whose one federated credential has the subject `repo:nickprignano/avd-hcl:ref:refs/heads/main`
+   (a dispatch from any other branch is refused, and no GitHub environment or Pro plan is
+   needed); you with your own account in Cloud Shell.
+2. It asks Key Vault to sign a 9-minute App JWT (RS256). Role assignments are **per key**: the
+   managed identity has **Key Vault Crypto User** on the reader key only, you on the writer key
+   only. The identity also has **Storage Blob Data Reader** on the state container and nothing
+   else. Its client, tenant and subscription IDs are repository variables (`vars.*`), not
+   secrets, and never in the repo.
+3. GitHub exchanges the JWT for a one-hour installation token **scoped to this repository and that
+   App's permissions**. It is masked in logs and passed to Terraform as `GITHUB_TOKEN` for that
+   one process.
+
+**Applies:** always you, from Cloud Shell, with the writer App: keyless, no token to create or
+revoke. Guardrail 6's reviewer and the person applying are the same person, and "a session never
+applies" holds because no session can sign in to Azure as you. Q11 still covers 0016's planned
+separate GitHub account for sessions. Before the writer key exists (the first apply, section 11
+step 4), a one-day fine-grained token with the writer App's permissions, typed with
+`read -rs GITHUB_TOKEN` and revoked after.
 
 **Bootstrap (`github/bootstrap/`, Azure, needs your go):** one resource group with a Key Vault
 (RBAC, purge protection), a storage account and container for the state, the managed identity,
-its federated credential and two role assignments. Estimate, to confirm against the retail price
+its federated credential and three role assignments. Estimate, to confirm against the retail price
 meters before the go: under **$0.20 a month** (Key Vault standard software-key operations at a few
 signs a day, one small blob, no compute). It is a standing resource on purpose, so it is recorded
 as a recurring cost, not torn down.
 
 **What you click (nothing else can do these):**
 
-1. Create the "settings reader" GitHub App (settings: no webhook, the three read permissions,
-   only on this account), install it on this repository, download one private key. A manifest
-   link, like nerdio-hcl's one-click setup page, can pre-fill this.
-2. In Cloud Shell: upload the key file, move it to `/tmp` (local to the session, not the
-   `clouddrive` file share, where deleting doesn't overwrite and snapshots can keep a copy),
-   import it into Key Vault as non-exportable with only the `sign` operation, delete it, and
-   delete the download on your device. GitHub mints the key, so it is briefly on two devices:
-   if either is lost, rotate the App key (0016 step 9). This is the weakest step in the chain.
-3. In the repository's settings: the three ID variables (a script can set them with your `gh`
-   sign-in instead, your choice).
-4. For each apply: create the fine-grained token above, run the apply block, revoke the token.
+1. Create the two GitHub Apps (a manifest link can pre-fill each) and install them on this
+   repository; download one private key for each.
+2. In Cloud Shell: upload each key file to `/tmp` (local to the session, not the `clouddrive` file
+   share, where deleting doesn't overwrite and snapshots can keep a copy), import it into Key
+   Vault as non-exportable with only the `sign` operation, delete it, and delete the download on
+   your device. GitHub mints the key, so it is briefly on two devices: if either is lost, rotate
+   the App key (0016 step 9). This is the weakest step in the chain.
+3. Repository variables for the identity's three IDs and the Key Vault's name (not secrets).
 
 Claude's GitHub tools can't read or change rulesets or most repository settings, and no session
-holds an admin credential, so every step that changes GitHub is one of the above.
+holds an admin credential or can sign in to Azure as you, so every step that changes GitHub is
+yours.
 
 ## 9. Drift workflow
 
@@ -227,7 +228,7 @@ holds an admin credential, so every step that changes GitHub is one of the above
 - Triggers: `schedule` (daily, off the hour) and `workflow_dispatch`; both jobs also check
   `github.ref == 'refs/heads/main'`, and the OIDC subject refuses any other ref anyway.
 - **Job `plan`**, permissions `contents: read`, `id-token: write` only: checkout; setup Terraform
-  (pinned); Azure sign-in by OIDC; mint the read-only App token; `terraform init` with backend
+  (pinned); Azure sign-in by GitHub OIDC; mint the read-only App token; `terraform init` with backend
   values from repository variables; `terraform plan -lock=false -input=false -detailed-exitcode
   -no-color` for each root under `github/repos/`. It uploads the plan text and an outcome
   (`clean`, `drift`, or `failed` with the failing step's name) as an artifact.
@@ -239,7 +240,8 @@ holds an admin credential, so every step that changes GitHub is one of the above
     doesn't comment every day;
   - `failed`: opens or updates the same issue as "drift check failed" with the step name and
     error, so a broken sign-in, token, init or plan is never silent.
-- What can write: the `plan` job can read state and sign one JWT, and its App token can only read.
+- What can write: the `plan` job can read state and have Key Vault sign one reader JWT, and its
+  App token can only read.
   The `report` job's `GITHUB_TOKEN` can write issues and **labels**, which are managed objects; a
   change to this workflow is under `.github/`, so it never merges itself (0014), and a label
   change it made would show as drift the next day.
@@ -255,50 +257,49 @@ holds an admin credential, so every step that changes GitHub is one of the above
 
 | | Fits this job? | Open source? | Verdict |
 |---|---|---|---|
-| **Terraform + `integrations/github`** | Yes: plan shows drift, import of existing settings, `terraform test` offline, same tool and CI pin as the rest of this repo | Terraform is **BSL 1.1** (source-available, not OSI open source); the GitHub provider is MIT | **Pick for this repo**: decision 0001 already chose the HashiCorp stack, and a second tool in one repo is worse than one |
-| **OpenTofu** | Yes, the same provider and HCL; adds client-side state encryption | **MPL-2.0**, Linux Foundation | Runner-up. The folder stays OpenTofu-compatible so switching is a binary change. Whether the whole repo should move is a repo-wide question decision 0001 didn't weigh (Q1) |
+| **Terraform Community Edition + `integrations/github`** | Yes: plan shows drift, import of existing settings, `terraform test` offline, same tool and CI pin as the rest of this repo | Terraform is **BSL 1.1** (free to use, source-available, not OSI open source); the GitHub provider is MIT | **Pick**: the owner chose the HashiCorp community editions for the whole repo (decision 0004) |
+| **OpenTofu** | Yes, the same provider and HCL; adds client-side state encryption | **MPL-2.0**, Linux Foundation | Prior art only, by the owner's choice (decision 0004) |
 | **Safe Settings** (GitHub's Probot app) | Partly: settings from YAML in an `admin` repo, `nop` dry-run on PRs, rulesets supported | ISC | No: built for organizations (an `admin` repo in the org), needs hosting, and its normal mode **reverts** drift with a standing write credential, which this spec rules out |
 | **Settings app** (`.github/settings.yml`, Probot) | Applies on push, no drift report, limited ruleset support | ISC | No: applies automatically |
 | **nerdio-hcl `modules/github-repo`** (yours, Apache-2.0) | Labels, workflow token, ruleset on one branch | Yes | Reused as the starting point, with credit; this module adds merge settings, security, topics and required checks |
 | **Build our own** (snapshot with `gh api` and diff, like avd-landing-zone's snapshot diff) | Drift report only, no apply | n/a | No: you asked for the provider, and it would re-implement import and plan |
 
-Under the family's build-or-adopt rule, Terraform is the pick here only because this repository is
-already Terraform; on licensing alone OpenTofu wins.
+This repository is outside the avd-ops family, and its owner chose the HashiCorp community
+editions knowing they are source-available (decision 0004); OpenTofu and OpenBao stay as prior art.
 
 ## 11. Order of work, each step on your word
 
 1. **This spec** (PR, docs only). You approve or change it.
 2. **Code PR, offline:** `github/` module and root, import blocks, tests, the drift workflow
-   (inert until step 4), `conventions.md`, CI. No credential, nothing applied.
-3. **First plan, read-only:** you create a read-only fine-grained token (same as section 8's apply
-   token but read permissions only), run one Cloud Shell block that runs `terraform plan` with
-   local state, and paste the plan's text here. Nothing changes.
-4. **Bootstrap**, after a written estimate and your go: the Azure pieces, the App, the key import,
-   the repository variables. The first drift run is started by hand and should report the same plan as
-   step 3.
-5. **Apply**, on your go and only after PR #10 has merged (the required check names come from
-   it), from Cloud Shell with the write token; the drift run after it must be clean. Then the follow-up PR adding import blocks for the new objects.
+   (inert until step 5), `conventions.md`, CI. No credential, nothing applied.
+3. **First plan, read-only:** you create a read-only fine-grained token (the permissions of the
+   reader App), run one Cloud Shell block that runs `terraform plan` with local state, and paste
+   the plan's text here. Nothing changes.
+4. **First apply**, on your go and only after PR #10 has merged (the required check names come
+   from it), from Cloud Shell with a one-day fine-grained write token, revoked after. Local
+   state moves to the state container afterwards (step 5). Then the follow-up PR adding import
+   blocks for the new objects.
+5. **Bootstrap and the drift check**, after a written estimate and your go: the Key Vault, state
+   container and identity, both Apps and their keys, the repository variables. The first drift
+   run is started by hand and must be clean. From then on, applies use the writer App and no
+   token is created by hand.
 
 ## 12. Open questions for you
 
 Collected in the PR and the thread reply; numbered here so answers can refer to them.
 
-- **Q1.** Terraform (BSL) or OpenTofu (MPL-2.0) for this folder, and is the license question worth
-  a repo-wide decision record?
-- **Q2.** Is your account on GitHub Pro? Rulesets on a private personal repo need it (the drift
-  check no longer does). Without Pro, the ruleset only takes effect once the repo is public.
+- **Q1.** Answered: Terraform and Packer community editions, no Vault (decision 0004).
+- **Q2.** Answered: not on GitHub Pro yet, upgrading. The module's `enforce_ruleset` switch stays
+  off until then (or until the repo is public); everything else applies without Pro.
 - **Q3.** Answered: the second repository is nerdio-hcl, handled in its own project (section 7).
 - **Q4.** OK that the read-only drift check runs with no reviewer, pinned to `main` by its OIDC
   subject instead of a GitHub environment?
-- **Q5.** Apply with a one-day fine-grained token you type in Cloud Shell (simple; an exception to
-  guardrail 6 and 0016 step 3), a reviewer-gated `apply` workflow, or a second Key Vault-held
-  "writer" App (keyless, more setup)?
-- **Q6.** Key Vault for the reader App's key (recommended, about $0.20 a month, needs a go), or the
-  key as a `github-drift` environment secret ($0, but a long-lived key in Actions secrets, which
-  you ruled out)?
-- **Q7.** Delete branches on merge, squash and rebase off, Projects off, Dependabot version updates
+- **Q5.** Answered: a "settings writer" App whose key Key Vault holds, signable only by your
+  account; a fine-grained token only for the first apply.
+- **Q6.** Answered: Azure Key Vault holds both App keys; no Vault server (decision 0004).
+- **Q7.** (built as proposed in the code PR, except the Dependabot file, which waits for your yes) Delete branches on merge, squash and rebase off, Projects off, Dependabot version updates
   file: yes to each?
-- **Q8.** Topics and the new description as proposed?
+- **Q8.** (built as proposed) Topics and the new description as proposed?
 - **Q9.** Drop the state backend? With an import block for every managed object, a plan against
   an empty local state shows the same drift (imports plus updates), and the storage account goes
   away. The cost: the ruleset's numeric ID is written into the import block (a GitHub ID, not a
@@ -311,8 +312,9 @@ Collected in the PR and the thread reply; numbered here so answers can refer to 
   without admin, which would make "a session never applies" a technical gate), or go ahead
   without it?
 - **Q12.** Which Azure subscription holds the bootstrap (your personal sandbox, as with the kit's
-  runs?), and is the standing cost of about $0.20 a month recorded alongside the sandbox spend
+  runs?), and is its standing cost of under $0.20 a month recorded alongside the sandbox spend
   records?
+- **Q13.** Answered: no Vault server (decision 0004).
 
 Red-teamed with Fable on 2026-10-21: 17 findings, all taken. Changed as a result: required check
 names and the Terraform pin follow PR #10, and the ruleset applies only after it; the full list of
@@ -324,3 +326,7 @@ check; the key hand-off avoids the Cloud Shell file share; the apply token is fl
 exception to guardrail 6 and 0016; nerdio-hcl's conflict named precisely; Q9 to Q12 added. Later the same day the owner named
 nerdio-hcl as the second repository and moved it to its own project, so section 7 shrank to the
 shared settings table.
+
+Updated 2026-10-21 evening: the owner chose the Terraform and Packer community editions and,
+after weighing a Vault server's cost, no Vault (decision 0004). Section 8 keeps both App keys in
+Azure Key Vault and adds a writer App, so applies after the first are keyless.

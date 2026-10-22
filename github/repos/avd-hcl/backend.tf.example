@@ -1,0 +1,14 @@
+# Copy to backend.tf (git-ignored) after the bootstrap, then run
+#   terraform init -migrate-state -backend-config=backend.hcl
+# with backend.hcl (also git-ignored) holding the real names:
+#   resource_group_name  = "<resource-group>"
+#   storage_account_name = "<storage-account>"
+#   container_name       = "tfstate"
+# The drift workflow writes both files from repository variables before init.
+terraform {
+  backend "azurerm" {
+    key              = "github/avd-hcl.tfstate"
+    use_azuread_auth = true # Storage Blob Data Reader can't list storage keys
+    use_oidc         = true # GitHub Actions; ignored in Cloud Shell, which uses your az sign-in
+  }
+}

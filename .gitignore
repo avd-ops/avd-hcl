@@ -12,6 +12,8 @@ environments/*/00-pipeline/backend_override.tf
 environments/*/00-pipeline/.terraform-*/
 environments/*/00-pipeline/.state/
 environments/*/00-pipeline/*.pipeline.tfvars.json
+# github/: backend.tf is copied from backend.tf.example after the bootstrap (spec section 11).
+github/repos/*/backend.tf
 *.tfplan
 tfplan
 
@@ -39,6 +41,9 @@ readiness.json
 Thumbs.db
 Desktop.ini
 
-# Lock files belong to roots (environments/), not to reusable modules.
+# Lock files belong to roots (environments/, github/repos/), not to reusable modules.
 modules/**/.terraform.lock.hcl
+github/modules/**/.terraform.lock.hcl
+
+# Python
 __pycache__/

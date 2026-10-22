@@ -7,3 +7,4 @@ MADR 4 format, numbered in order. A record changes status only by a pull request
 | [0001](0001-native-avd-with-the-hashicorp-stack.md) | Native AVD with the HashiCorp stack, in its own repo, beside avd-landing-zone | accepted |
 | [0002](0002-reuse-with-credit.md) | Reuse what exists, with full credit; Apache-2.0 | accepted |
 | [0003](0003-own-modules-on-azurerm-5.md) | Own thin modules on azurerm 5, not Azure Verified Modules, for now | accepted |
+| [0004](0004-hashicorp-community-editions.md) | Terraform and Packer community editions; Key Vault, not Vault, for secrets | accepted |

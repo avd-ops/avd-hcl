@@ -15,5 +15,8 @@ Ideas and facts are credited too, not only code ([decision 0002](docs/knowledge/
 | `scripts/readiness/` (model, context, runner, report and the op, identity, subscription, network and avd checks), `scripts/preflight.py` | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `scripts/nerdio/readiness/` | Apache-2.0 | `75f59bc` | Adapted; Nerdio checks removed, AVD checks added; each file's header says what changed |
 | `scripts/schema/answers.py`: the idea of one `init` and render step over the schema | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `./nerdio init` | Apache-2.0 | `75f59bc` | Design only; written new |
 | Fail-closed gitleaks pre-commit hook and full-history CI scan | This repo's earlier lab kit (same author) | MIT, same author | `de2b9bc` | Kept and edited |
+| GitHub repository settings module (labels, read-only workflow token, ruleset on the default branch) | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `modules/github-repo` | Apache-2.0 | `75f59bc` | Adapted in `github/modules/repo-settings` |
+| GitHub App token from a non-exportable Key Vault key (Key Vault signs the JWT) | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl) `assistant/pipeline.py` | Apache-2.0 | `75f59bc` | Adapted in `github/scripts/app_token.py` |
+| GitHub work conventions (merge commits, required checks, admin bypass for pull requests, labels) and secrets handling | [ai-brain](https://github.com/nickprignano/ai-brain) decisions 0011, 0012, 0014, 0016 | Apache-2.0 | `aee6a18` | Conventions, in our own words (`github/conventions.md`) |
 
 Add a row in the same pull request that brings something in.

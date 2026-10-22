@@ -4,8 +4,8 @@
 > or endorsed by the author's employer, Microsoft, HashiCorp or Nerdio.
 
 Native Azure Virtual Desktop, deployed and operated with the HashiCorp stack: Terraform for the
-estate, Packer for golden images, Vault (or OpenBao) where a secret store is needed, and Ansible
-only if it turns out to earn its place. No vendor management plane sits in the path.
+estate, Packer for golden images, Azure Key Vault and managed identities for secrets (no Vault
+server, decision 0004), and Ansible only if it turns out to earn its place. No vendor management plane sits in the path.
 
 **Status: phase 1, built and tested offline only.** The platform stage builds one pooled,
 Entra-joined host pool with FSLogix, autoscale and AVD Insights; it has not run against Azure yet.

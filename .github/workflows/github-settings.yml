@@ -1,0 +1,54 @@
+# Offline checks for github/ (the repository's own GitHub settings): validate, terraform test with
+# a mock provider, and the token script's unit tests. No credentials. Spec:
+# docs/knowledge/github-settings-spec.md.
+name: GitHub settings
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ["github/**", ".github/workflows/github-settings.yml", ".github/workflows/github-drift.yml"]
+  push:
+    branches: [main]
+    paths: ["github/**", ".github/workflows/github-settings.yml", ".github/workflows/github-drift.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: GitHub settings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the GitHub settings workflows (actionlint with shellcheck)
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          set -euo pipefail
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" .github/workflows/github-drift.yml .github/workflows/github-settings.yml
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.6
+          terraform_wrapper: false
+      - name: Format
+        run: terraform fmt -check -recursive -diff github
+      - name: Module validate and test (mock provider)
+        working-directory: github/modules/repo-settings
+        run: |
+          terraform init -backend=false -input=false -no-color >/dev/null
+          terraform validate -no-color
+          terraform test -no-color
+      - name: Root validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in github/repos/*/; do
+            echo "::group::$dir"
+            (cd "$dir" && terraform init -backend=false -input=false -no-color >/dev/null && terraform validate -no-color)
+            echo "::endgroup::"
+          done
+      - name: Token script tests
+        run: python3 -m unittest discover -s github/scripts -v
