@@ -1,7 +1,7 @@
 # Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), .github/workflows/deploy.yml; see CREDITS.md and NOTICE.
-# Changes: the AVD platform stage, AVD_ENV, and no vendor steps.
+# Changes: the AVD platform and preflight stages, AVD_ENV, and no vendor steps.
 name: Deploy
-run-name: "${{ inputs.environment }} ${{ inputs.stage }}: ${{ inputs.apply && 'plan and apply' || 'plan' }}"
+run-name: "${{ inputs.environment }} ${{ inputs.stage }}: ${{ inputs.stage == 'preflight' && 'readiness check' || inputs.apply && 'plan and apply' || 'plan' }}"
 
 # Plan, then apply after a reviewer approves (docs/knowledge/pipeline.md). Start it from the
 # Actions tab. The plan job signs in as the read-only plan identity. The apply job waits in the
@@ -23,11 +23,12 @@ on:
           - prod
         default: sandbox
       stage:
-        description: "Which stage?"
+        description: "Which stage? preflight only checks readiness and never changes anything."
         required: true
         type: choice
         options:
           - platform
+          - preflight
         default: platform
       apply:
         description: "Apply after the plan? A reviewer still has to approve it."

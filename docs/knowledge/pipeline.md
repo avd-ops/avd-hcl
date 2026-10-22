@@ -26,7 +26,8 @@ GitHub yet (that needs a written estimate and the owner's exact go).
    saved plan, checks the hash, and applies exactly that plan; Terraform refuses it if the state
    moved since.
 
-State lives at `avd/<env>/<stage>.tfstate`. Saved plans expire after 7 days.
+Stage `preflight` runs the read-only readiness check ([readiness.md](readiness.md)) as the plan
+identity instead, and never applies. State lives at `avd/<env>/<stage>.tfstate`. Saved plans expire after 7 days.
 
 ## Who can do what
 

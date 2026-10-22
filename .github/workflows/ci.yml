@@ -64,6 +64,8 @@ jobs:
         run: python3 scripts/schema/check.py
       - name: Unit tests
         run: python3 -m unittest discover -s scripts/schema
+      - name: Readiness check tests (recorded az answers, no Azure)
+        run: python3 -m unittest discover -s scripts/readiness -t scripts
 
   # Guards for the rules in docs/guardrails.md that a machine can check.
   guard:

@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), scripts/pipeline/stage.sh; see CREDITS.md and NOTICE.
-# Changes: one AVD stage (platform), answers rendered by scripts/schema/answers.py, state under
-# avd/<env>/, no adopted-values or vendor steps, and the readiness check comes in phase 2b.
+# Changes: the AVD stages (platform, and preflight for the readiness check), answers rendered by
+# scripts/schema/answers.py, state under avd/<env>/, and no adopted-values or vendor steps.
 #
 # Plan or apply one kit stage inside the deploy workflow (.github/workflows/deploy.yml).
 #
 #   scripts/pipeline/stage.sh plan    render tfvars from the answers, plan, save the plan
 #                                     and a change summary
 #   scripts/pipeline/stage.sh apply   fetch the saved plan, check its hash, apply exactly it
+#   STAGE=preflight ... plan          the read-only readiness check instead (scripts/preflight.py)
 #
 # Every run leaves a result in the plans container, failures included (with the last lines of
 # the log, IDs masked), so a later chat can explain what happened without opening the log.
@@ -18,7 +19,7 @@
 # repository's Actions logs are public.
 #
 # Inputs (set by the workflow from the GitHub environment's secrets):
-#   STAGE                    platform
+#   STAGE                    platform | preflight
 #   AVD_ENV                  sandbox | dev | prod
 #   ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_ID
 #   TFSTATE_RESOURCE_GROUP TFSTATE_STORAGE_ACCOUNT
@@ -30,8 +31,10 @@ action="${1:-}"
 case "$action" in plan | apply) ;; *) echo "usage: $0 plan|apply" >&2; exit 64 ;; esac
 case "${STAGE:-}" in
   platform) dir_name=01-platform ;;
-  *) echo "STAGE must be platform" >&2; exit 64 ;;
+  preflight) dir_name=01-platform ;; # checks the answers the platform stage would use
+  *) echo "STAGE must be platform or preflight" >&2; exit 64 ;;
 esac
+[ "$STAGE" != preflight ] || [ "$action" = plan ] || { echo "preflight only plans" >&2; exit 64; }
 [[ "${AVD_ENV:-}" =~ ^[a-z][a-z0-9-]{1,20}$ ]] || { echo "AVD_ENV is missing or malformed" >&2; exit 64; }
 for v in ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_ID TFSTATE_RESOURCE_GROUP TFSTATE_STORAGE_ACCOUNT; do
   [ -n "${!v:-}" ] || { echo "$v isn't set: run scripts/pipeline/bootstrap.sh for the $AVD_ENV environment first" >&2; exit 2; }
@@ -88,6 +91,32 @@ if [ "$action" = plan ]; then
   # One versioned blob per environment, written by the bootstrap script.
   blob download answers "$AVD_ENV.json" "$root/.avd/answers.json" 2>/dev/null \
     || fail "No answers for $AVD_ENV yet. Run scripts/pipeline/bootstrap.sh --answers-only from Cloud Shell."
+  if [ "$STAGE" = preflight ]; then
+    echo "== Readiness check (read-only)"
+    # Signed in as the plan identity, so the deployer-rights check comes back as "manual": the
+    # apply identity holds those roles by design. Everything else is checked for real.
+    log="$work/preflight.log"
+    code=0
+    python3 "$root/scripts/preflight.py" --answers "$root/.avd/answers.json" --environment "$AVD_ENV" --format json \
+      > "$work/preflight.json" 2> "$log" || code=$?
+    jq -e '.schema == "avd-hcl-readiness/1"' "$work/preflight.json" >/dev/null 2>&1 || fail "The readiness check didn't finish"
+    redact < "$work/preflight.json" | jq '{stage: "preflight", status: (.verdict | ascii_downcase | gsub(" "; "-")), verdict, counts, results}' \
+      > "$work/result.json"
+    blob upload plans "$result_blob" "$work/result.json" --overwrite
+    {
+      echo "## $AVD_ENV / readiness check: $(jq -r '.verdict' "$work/result.json")"
+      echo
+      echo "| Result | Check | Detail | Fix |"
+      echo "|---|---|---|---|"
+      jq -r '.results[] | select(.status != "skipped" and .status != "pass") | "| \(.status) | `\(.id)` \(.title) | \(.detail | gsub("\\|"; "/")) | \(.fix | gsub("\\|"; "/")) |"' "$work/result.json"
+    } | summary
+    echo "Readiness check: $(jq -r .verdict "$work/result.json")"
+    echo "changes=false" >> "${GITHUB_OUTPUT:-/dev/null}"
+    # NO-GO (1) and INCOMPLETE (3) turn the job red, so nobody misses them.
+    [ "$code" = 0 ] || { trap - ERR; exit "$code"; }
+    exit 0
+  fi
+
   # Tenant and subscription come from ARM_*; group names are looked up with the plan identity.
   log="$work/render.log"
   python3 "$root/scripts/schema/answers.py" render --environment "$AVD_ENV" > "$log" 2>&1 || { redact < "$log"; fail "The answers don't pass the schema"; }

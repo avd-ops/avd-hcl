@@ -21,6 +21,7 @@ The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is 
 | `schema/parameters.json` | The one list of deployment parameters behind every front door |
 | `scripts/schema/` | The schema check CI runs, and `answers.py` (`init` asks the questions, `render` writes the tfvars) |
 | `modules/deploy-pipeline/`, `environments/example/00-pipeline/` | The gated pipeline: state storage, plan and apply identities, GitHub environments |
+| `scripts/preflight.py`, `scripts/readiness/` | The read-only readiness check before the platform stage |
 | `scripts/pipeline/` | `bootstrap.sh` (one-time setup from Cloud Shell) and `stage.sh` (what the Deploy workflow runs) |
 
 ## Try it offline
@@ -31,6 +32,7 @@ From Cloud Shell, with no Azure changes (mock providers only):
 git clone https://github.com/nickprignano/avd-hcl.git && cd avd-hcl
 for d in modules/*/ environments/example/*/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
 python3 scripts/schema/check.py && python3 -m unittest discover -s scripts/schema
+python3 -m unittest discover -s scripts/readiness -t scripts
 ```
 
 ## Where it comes from
