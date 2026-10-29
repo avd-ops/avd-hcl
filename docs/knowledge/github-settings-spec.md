@@ -3,7 +3,7 @@ title: "GitHub settings as code"
 summary: "Spec: this repository's GitHub settings declared with the Terraform GitHub provider in github/, imported first, checked for drift on a schedule, never applied by CI"
 topic: github
 status: proposed
-last_reviewed: 2026-10-21
+last_reviewed: 2026-10-29
 ---
 
 # GitHub settings as code
@@ -225,8 +225,18 @@ yours.
 
 `.github/workflows/github-drift.yml`:
 
-- Triggers: `schedule` (daily, off the hour) and `workflow_dispatch`; both jobs also check
-  `github.ref == 'refs/heads/main'`, and the OIDC subject refuses any other ref anyway.
+- Triggers: `schedule` (daily, off the hour) and `workflow_dispatch`; every job runs only on
+  `refs/heads/main`, and the OIDC subject refuses any other ref anyway.
+- **Job `precheck`**, permissions `issues: write` only, no Azure: checks the six repository
+  variables the plan needs (`github/scripts/drift_precheck.sh`: `DRIFT_KEY_URL`, `DRIFT_CLIENT_ID`, `AZURE_TENANT_ID`,
+  `AZURE_SUBSCRIPTION_ID`, `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT`).
+  - **None set** (before the bootstrap): the run skips cleanly, writes the setup steps and the
+    variable names to the run summary, and closes an open "drift check failed" issue, which it
+    can no longer confirm. A real drift issue stays open, with a warning on the run that nothing
+    checks it any more.
+  - **Some set:** the plan doesn't run, and `report` opens or updates the "drift check failed"
+    issue naming the missing variables, so a half-finished setup is never silent.
+  - **All set:** `plan` and `report` run as below.
 - **Job `plan`**, permissions `contents: read`, `id-token: write` only: checkout; setup Terraform
   (pinned); Azure sign-in by GitHub OIDC; mint the read-only App token; `terraform init` with backend
   values from repository variables; `terraform plan -lock=false -input=false -detailed-exitcode
@@ -251,7 +261,30 @@ yours.
 - Heartbeat: if the last successful run is older than 7 days (a disabled schedule, an expired
   App key), the next run, or your weekday open-work list, says so. Scheduled workflows in a
   public repository stop after 60 days without activity (Q10).
-- **Never applies.** There is no apply step and no credential in either job that could.
+- Drift and failure are **separate issues**, found by title: a failure never lands on, renames or
+  closes a drift issue. `clean` closes both; `drift` closes an open failure issue, since the check
+  runs again.
+- **Never applies.** There is no apply step and no credential in any job that could.
+- **Not turned into a pull request.** Unlike a knowledge base's digest or feedback issues, a drift
+  issue has no automatic issue-to-PR path, on purpose: the fix is either an apply from Cloud Shell
+  (live settings back to `github/`) or a hand-written change to `github/` (code to the live
+  settings), and choosing between them is the owner's call. The issue closes itself on the first
+  clean run after either.
+
+**Lessons (2026-10-29, issue-loop audit):**
+
+- *A scheduled workflow gated only by a job-level `if` on one variable fails silently in both
+  directions.* Before setup it skipped without saying how to set it up; with one variable set and
+  the others missing it would have failed daily at Azure sign-in with an unhelpful error. Fix: a
+  pre-check job that tells "not set up" (skip, setup steps in the summary) from "half set up"
+  (report the missing names). Guard: `github/scripts/test_drift_precheck.py` runs the pre-check's
+  branches against a fake `gh` in CI, and actionlint checks the workflow.
+- *One issue for two kinds of finding hides one of them.* Reusing the first open `drift` issue for a
+  failure would have put a setup error on (and, once closed as stale, closed) a real drift record.
+  Each kind now has its own issue, found by title.
+- *Every scheduled check that opens an issue needs a branch that closes it.* The clean branch
+  existed; the "not set up any more" branch didn't, which would have left a failure issue open
+  forever after a setup was removed.
 
 ## 10. Prior art and why Terraform
 
