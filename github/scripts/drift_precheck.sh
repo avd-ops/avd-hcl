@@ -20,9 +20,9 @@ for name in $NAMES; do
     gone=$((gone + 1))
   fi
 done
-if [ "$gone" -eq 0 ]; then state=ready
-elif [ "$gone" -eq "$total" ]; then state=unset
-else state=partial; fi
+if [ "$gone" -eq 0 ]; then state="ready"
+elif [ "$gone" -eq "$total" ]; then state="unset"
+else state="partial"; fi
 echo "state=$state" >> "$GITHUB_OUTPUT"
 echo "missing=$missing" >> "$GITHUB_OUTPUT"
 echo "Drift check: $state${missing:+ (missing: $missing)}"
