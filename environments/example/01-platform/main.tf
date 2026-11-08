@@ -65,13 +65,17 @@ module "network" {
 }
 
 module "monitoring" {
-  source              = "../../../modules/monitoring"
-  prefix              = var.prefix
-  name                = local.names.log_analytics
-  location            = var.location
-  resource_group_name = module.foundation.resource_group_names["monitoring"]
-  tags                = local.tags
-  retention_in_days   = var.log_retention_days
+  source                = "../../../modules/monitoring"
+  prefix                = var.prefix
+  name                  = local.names.log_analytics
+  location              = var.location
+  resource_group_name   = module.foundation.resource_group_names["monitoring"]
+  tags                  = local.tags
+  retention_in_days     = var.log_retention_days
+  subscription_id       = data.azurerm_subscription.current.id
+  alert_email_addresses = var.alert_email_addresses
+  monthly_budget_amount = var.monthly_budget_amount
+  budget_start_date     = var.budget_start_date
 }
 
 module "key_vault" {
@@ -121,6 +125,8 @@ module "control_plane" {
   tags                       = local.tags
   host_pool_name             = local.names.host_pool
   host_pool_friendly_name    = var.host_pool_friendly_name
+  host_pool_type             = var.host_pool_type
+  personal_assignment_type   = var.personal_assignment_type
   app_group_name             = local.names.app_group
   workspace_name             = local.names.workspace
   workspace_friendly_name    = var.workspace_friendly_name
@@ -142,6 +148,9 @@ module "session_hosts" {
   tags                     = local.tags
   host_count               = var.host_count
   name_prefix              = var.vm_prefix
+  host_generation          = var.host_generation
+  auto_shutdown_time       = var.auto_shutdown_time
+  time_zone                = var.time_zone
   vm_size                  = var.vm_size
   availability_zones       = var.availability_zones
   marketplace_image        = var.image_id == null ? var.marketplace_image : null

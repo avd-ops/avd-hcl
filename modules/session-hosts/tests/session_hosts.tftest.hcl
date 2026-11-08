@@ -133,3 +133,45 @@ run "long_prefix_is_rejected" {
 
   expect_failures = [var.name_prefix]
 }
+
+run "blue_green_generation_and_auto_shutdown" {
+  command = plan
+
+  variables {
+    name_prefix        = "elevenchars"
+    host_generation    = "a"
+    host_count         = 2
+    auto_shutdown_time = "2000"
+    time_zone          = "Eastern Standard Time"
+  }
+
+  assert {
+    condition     = output.host_names == ["elevenchara-001", "elevenchara-002"] && length(output.host_names[0]) <= 15
+    error_message = "Generation trims a 11-character prefix to 10 plus the generation so names stay within 15 characters."
+  }
+
+  assert {
+    condition     = azurerm_dev_test_global_vm_shutdown_schedule.host["elevenchara-001"].daily_recurrence_time == "2000" && azurerm_dev_test_global_vm_shutdown_schedule.host["elevenchara-001"].timezone == "Eastern Standard Time"
+    error_message = "Daily auto-shutdown schedule is created per host when auto_shutdown_time is set."
+  }
+}
+
+run "bad_generation_is_rejected" {
+  command = plan
+
+  variables {
+    host_generation = "c"
+  }
+
+  expect_failures = [var.host_generation]
+}
+
+run "bad_auto_shutdown_time_is_rejected" {
+  command = plan
+
+  variables {
+    auto_shutdown_time = "2500"
+  }
+
+  expect_failures = [var.auto_shutdown_time]
+}

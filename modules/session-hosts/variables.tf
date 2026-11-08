@@ -38,6 +38,32 @@ variable "name_prefix" {
   }
 }
 
+variable "host_generation" {
+  description = "Host generation for blue/green rotation: empty keeps <name_prefix>-NNN; a or b gives substr(name_prefix, 0, 10) + generation so old and new hosts never collide."
+  type        = string
+  default     = ""
+  validation {
+    condition     = contains(["", "a", "b"], var.host_generation)
+    error_message = "host_generation must be empty, a or b."
+  }
+}
+
+variable "auto_shutdown_time" {
+  description = "Daily VM auto-shutdown time in HHmm (24-hour, in time_zone), for example 2000. Null disables the per-host shutdown schedule."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.auto_shutdown_time == null || can(regex("^([01][0-9]|2[0-3])[0-5][0-9]$", var.auto_shutdown_time))
+    error_message = "auto_shutdown_time must be 4 digits in 24-hour HHmm format, such as 2000, or null."
+  }
+}
+
+variable "time_zone" {
+  description = "Windows time zone ID for the daily auto-shutdown schedule, for example \"UTC\" or \"Eastern Standard Time\"."
+  type        = string
+  default     = "UTC"
+}
+
 variable "vm_size" {
   description = "Session host VM size. Memory-optimized E-series suits multi-session hosts."
   type        = string

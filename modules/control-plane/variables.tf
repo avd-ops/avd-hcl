@@ -26,6 +26,26 @@ variable "host_pool_friendly_name" {
   default     = null
 }
 
+variable "host_pool_type" {
+  description = "Pooled (shared multi-session hosts) or Personal (one host per user, with Start VM on Connect)."
+  type        = string
+  default     = "Pooled"
+  validation {
+    condition     = contains(["Pooled", "Personal"], var.host_pool_type)
+    error_message = "host_pool_type must be Pooled or Personal."
+  }
+}
+
+variable "personal_assignment_type" {
+  description = "How personal desktops are assigned when host_pool_type is Personal: Automatic (first available host on sign-in) or Direct."
+  type        = string
+  default     = "Automatic"
+  validation {
+    condition     = contains(["Automatic", "Direct"], var.personal_assignment_type)
+    error_message = "personal_assignment_type must be Automatic or Direct."
+  }
+}
+
 variable "app_group_name" {
   description = "Desktop application group name."
   type        = string

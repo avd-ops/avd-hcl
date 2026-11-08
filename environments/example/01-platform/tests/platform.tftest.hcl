@@ -74,6 +74,11 @@ mock_provider "azurerm" {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Network/networkInterfaces/nic-test"
     }
   }
+  mock_resource "azurerm_monitor_action_group" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test/providers/Microsoft.Insights/actionGroups/ag-test"
+    }
+  }
 }
 
 mock_provider "azuread" {
@@ -235,4 +240,22 @@ run "bad_prefix_is_rejected" {
   }
 
   expect_failures = [var.prefix]
+}
+
+run "personal_pool_and_budget" {
+  command = plan
+
+  variables {
+    host_pool_type        = "Personal"
+    host_generation       = "b"
+    auto_shutdown_time    = "2000"
+    alert_email_addresses = ["ops@contoso.com"]
+    monthly_budget_amount = 200
+    budget_start_date     = "2026-10-01T00:00:00Z"
+  }
+
+  assert {
+    condition     = output.host_pool_name == "vdpool-avd-test"
+    error_message = "Personal pool, generation, auto-shutdown and budget plan cleanly through the platform root."
+  }
 }

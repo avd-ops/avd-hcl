@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (git-ignored), or let the setup flow write setup.auto.tfvars.json.
+# tenant_id and subscription_id come from the signed-in account (ARM_TENANT_ID and
+# ARM_SUBSCRIPTION_ID, or TF_VAR_tenant_id and TF_VAR_subscription_id); don't save them here.
+
+environment = "sandbox"
+location    = "northcentralus"
+prefix      = "avd-sbx"

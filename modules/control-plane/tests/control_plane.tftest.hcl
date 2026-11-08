@@ -85,3 +85,26 @@ run "no_scaling_plan" {
     error_message = "No scaling plan, and logs from the other three objects."
   }
 }
+
+run "personal_desktop" {
+  command = plan
+
+  variables {
+    host_pool_type = "Personal"
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_host_pool.this.type == "Personal" && azurerm_virtual_desktop_host_pool.this.load_balancer_type == "Persistent" && azurerm_virtual_desktop_host_pool.this.personal_desktop_assignment_type == "Automatic"
+    error_message = "Personal pools use Persistent load balancing and Automatic assignment by default."
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_host_pool.this.start_vm_on_connect && azurerm_virtual_desktop_host_pool.this.maximum_sessions_allowed == null
+    error_message = "Personal pools keep Start VM on Connect on and omit the pooled session limit."
+  }
+
+  assert {
+    condition     = length(azurerm_virtual_desktop_scaling_plan.this) == 0 && length(azurerm_monitor_diagnostic_setting.this) == 3
+    error_message = "Personal pools skip the pooled scaling plan."
+  }
+}

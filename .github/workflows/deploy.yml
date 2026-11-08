@@ -28,6 +28,7 @@ on:
         type: choice
         options:
           - platform
+          - images
           - preflight
         default: platform
       apply:

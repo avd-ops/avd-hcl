@@ -2,23 +2,28 @@
 # CREDITS.md and NOTICE. Changes: written in Terraform with azurerm resources instead of Azure
 # Verified Modules (decision 0003); AVD Private Link comes in a later phase.
 #
-# Pooled host pool, desktop application group, workspace and an autoscale plan. Diagnostics from
-# every object go to Log Analytics (that's what AVD Insights reads).
+# Pooled or personal host pool, desktop application group, workspace and an autoscale plan.
+# Diagnostics from every object go to Log Analytics (that's what AVD Insights reads).
+
+locals {
+  deploy_scaling_plan = var.scaling_plan_enabled && var.host_pool_type == "Pooled"
+}
 
 resource "azurerm_virtual_desktop_host_pool" "this" {
-  name                     = var.host_pool_name
-  friendly_name            = var.host_pool_friendly_name
-  location                 = var.location
-  resource_group_name      = var.resource_group_name
-  type                     = "Pooled"
-  load_balancer_type       = "BreadthFirst"
-  preferred_app_group_type = "Desktop"
-  maximum_sessions_allowed = var.max_sessions_per_host
-  custom_rdp_properties    = var.rdp_properties
-  validate_environment     = var.validation_environment
-  start_vm_on_connect      = var.start_vm_on_connect
-  public_network_access    = "Enabled"
-  tags                     = var.tags
+  name                             = var.host_pool_name
+  friendly_name                    = var.host_pool_friendly_name
+  location                         = var.location
+  resource_group_name              = var.resource_group_name
+  type                             = var.host_pool_type
+  load_balancer_type               = var.host_pool_type == "Personal" ? "Persistent" : "BreadthFirst"
+  personal_desktop_assignment_type = var.host_pool_type == "Personal" ? var.personal_assignment_type : null
+  preferred_app_group_type         = "Desktop"
+  maximum_sessions_allowed         = var.host_pool_type == "Personal" ? null : var.max_sessions_per_host
+  custom_rdp_properties            = var.rdp_properties
+  validate_environment             = var.validation_environment
+  start_vm_on_connect              = var.start_vm_on_connect
+  public_network_access            = "Enabled"
+  tags                             = var.tags
 
   scheduled_agent_updates {
     enabled                   = true
@@ -92,7 +97,7 @@ resource "azurerm_role_assignment" "desktop_users" {
 # Weekdays: ramp up 07:00, peak 09:00, ramp down 18:00, off-peak 20:00.
 # Weekends: off-peak most of the day; Start VM on Connect brings a host up on demand.
 resource "azurerm_virtual_desktop_scaling_plan" "this" {
-  count               = var.scaling_plan_enabled ? 1 : 0
+  count               = local.deploy_scaling_plan ? 1 : 0
   name                = var.scaling_plan_name
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -155,7 +160,7 @@ locals {
       app_group = azurerm_virtual_desktop_application_group.desktop.id
       workspace = azurerm_virtual_desktop_workspace.this.id
     },
-    var.scaling_plan_enabled ? { scaling_plan = azurerm_virtual_desktop_scaling_plan.this[0].id } : {},
+    local.deploy_scaling_plan ? { scaling_plan = azurerm_virtual_desktop_scaling_plan.this[0].id } : {},
   )
 }
 

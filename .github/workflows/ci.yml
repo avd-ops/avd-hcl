@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   # Formatting, then validate, tflint and the offline tests (mock providers, no Azure) in every
-  # module and root. packer fmt joins with the image pipeline.
+  # module and root, plus packer fmt for the golden-image template.
   terraform:
     name: Terraform
     runs-on: ubuntu-latest
@@ -24,8 +24,11 @@ jobs:
         with:
           terraform_version: 1.16.6 # the version the tests were written against
           terraform_wrapper: false
+      - uses: hashicorp/setup-packer@main
       - name: Check formatting
-        run: terraform fmt -check -recursive -diff
+        run: |
+          terraform fmt -check -recursive -diff
+          packer fmt -check -diff packer/avd-win11
       - name: Install tflint
         env:
           TFLINT_VERSION: 0.64.0 # the azurerm ruleset's version is pinned in .tflint.hcl

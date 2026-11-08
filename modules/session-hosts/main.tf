@@ -15,14 +15,18 @@
 # admin_password or a run command's protected parameters, which is why those three use azapi.
 # The ephemeral values come from modules/run-secrets.
 #
-# Host settings reach existing hosts only by rebuilding them (host rotation, a later phase).
-# Changing an extension or run command in place would fail on hosts that autoscale has
-# deallocated (avd-landing-zone lesson 0026), so they ignore later changes.
+# Host settings reach existing hosts only by rebuilding them (host_generation switches between a
+# and b for blue/green rotation). Changing an extension or run command in place would fail on
+# hosts that autoscale has deallocated (avd-landing-zone lesson 0026), so they ignore later
+# changes.
 
 locals {
   # 11-character prefix + "-" + 3 digits = 15 characters, the Windows computer name limit.
+  # With a blue/green generation (a or b), substr(name_prefix, 0, 10) + generation stays <= 11.
+  effective_prefix = var.host_generation == "" ? var.name_prefix : "${substr(var.name_prefix, 0, 10)}${var.host_generation}"
+
   hosts = {
-    for i in range(var.host_count) : format("%s-%03d", var.name_prefix, i + 1) => {
+    for i in range(var.host_count) : format("%s-%03d", local.effective_prefix, i + 1) => {
       zone = length(var.availability_zones) == 0 ? null : var.availability_zones[i % length(var.availability_zones)]
     }
   }
@@ -279,6 +283,20 @@ resource "azapi_resource" "register_agent" {
 
   # Run commands on one VM execute one at a time.
   depends_on = [azapi_resource.configure_fslogix]
+}
+
+resource "azurerm_dev_test_global_vm_shutdown_schedule" "host" {
+  for_each              = var.auto_shutdown_time == null ? {} : local.hosts
+  virtual_machine_id    = azapi_resource.host[each.key].id
+  location              = var.location
+  enabled               = true
+  daily_recurrence_time = var.auto_shutdown_time
+  timezone              = var.time_zone
+  tags                  = var.tags
+
+  notification_settings {
+    enabled = false
+  }
 }
 
 # ---------- Access to the hosts ----------
