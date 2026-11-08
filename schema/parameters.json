@@ -44,7 +44,8 @@
     }
   ],
   "stages": {
-    "platform": "environments/{env}/01-platform"
+    "platform": "environments/{env}/01-platform",
+    "images": "environments/{env}/02-images"
   },
   "output_file": "setup.auto.tfvars.json",
   "constants": [],
@@ -73,6 +74,10 @@
       "tfvars": [
         {
           "stage": "platform",
+          "path": "environment"
+        },
+        {
+          "stage": "images",
           "path": "environment"
         }
       ],
@@ -120,6 +125,10 @@
         {
           "stage": "platform",
           "path": "tenant_id"
+        },
+        {
+          "stage": "images",
+          "path": "tenant_id"
         }
       ]
     },
@@ -135,6 +144,10 @@
         {
           "stage": "platform",
           "path": "subscription_id"
+        },
+        {
+          "stage": "images",
+          "path": "subscription_id"
         }
       ]
     },
@@ -149,6 +162,10 @@
       "tfvars": [
         {
           "stage": "platform",
+          "path": "location"
+        },
+        {
+          "stage": "images",
           "path": "location"
         }
       ],
@@ -183,6 +200,10 @@
       "tfvars": [
         {
           "stage": "platform",
+          "path": "prefix"
+        },
+        {
+          "stage": "images",
           "path": "prefix"
         }
       ],
@@ -506,6 +527,157 @@
       "sources": [
         "https://learn.microsoft.com/azure/virtual-desktop/autoscale-create-assign-scaling-plan"
       ]
+    },
+    {
+      "id": "host_pool_type",
+      "phase": "configure",
+      "type": "enum",
+      "question": "Pooled multi-session hosts or personal one-user desktops?",
+      "help": "Pooled shares hosts across users with autoscale. Personal assigns one VM per user with Start VM on Connect.",
+      "choices": [
+        {
+          "value": "Pooled",
+          "label": "Pooled: shared multi-session hosts"
+        },
+        {
+          "value": "Personal",
+          "label": "Personal: one dedicated host per user"
+        }
+      ],
+      "default": "Pooled",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "host_pool_type"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "personal_assignment_type",
+      "phase": "configure",
+      "type": "enum",
+      "question": "How are personal desktops assigned to users?",
+      "help": "Automatic assigns a free host on first sign-in. Direct requires an admin to assign each user to a host.",
+      "choices": [
+        {
+          "value": "Automatic",
+          "label": "Automatic: assign on first sign-in"
+        },
+        {
+          "value": "Direct",
+          "label": "Direct: admin assigns each host"
+        }
+      ],
+      "default": "Automatic",
+      "when": {
+        "host_pool_type": [
+          "Personal"
+        ]
+      },
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "personal_assignment_type"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "host_generation",
+      "phase": "configure",
+      "type": "enum",
+      "question": "Session host generation suffix for blue/green image rotation?",
+      "help": "Switch between a and b when rolling out a new golden image so new hosts join alongside old ones before drain.",
+      "choices": [
+        {
+          "value": "",
+          "label": "None: no generation suffix"
+        },
+        {
+          "value": "a",
+          "label": "Generation a"
+        },
+        {
+          "value": "b",
+          "label": "Generation b"
+        }
+      ],
+      "default": "",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "host_generation"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "auto_shutdown_time",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3])[0-5][0-9]$",
+      "question": "Daily VM auto-shutdown time (24-hour HHmm)?",
+      "help": "Safety net for personal pools or lab hosts, for example 2200. Leave empty when a pooled scaling plan manages power.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "auto_shutdown_time",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "alert_email_addresses",
+      "phase": "configure",
+      "type": "string_list",
+      "question": "Email addresses for platform and budget alerts?",
+      "help": "Creates an Azure Monitor action group. Required if you set a monthly budget.",
+      "default": [],
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "alert_email_addresses"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "monthly_budget_amount",
+      "phase": "configure",
+      "type": "int",
+      "min": 1,
+      "max": 1000000,
+      "question": "Monthly subscription budget in currency units?",
+      "help": "Emails the alert list at 80% actual and 100% forecasted spend. Leave empty for no budget.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "monthly_budget_amount",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "budget_start_date",
+      "phase": "configure",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-01T00:00:00Z$",
+      "question": "Start date for the monthly budget (YYYY-MM-01T00:00:00Z)?",
+      "help": "Azure budgets must start on the first of the current or a future month.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "budget_start_date",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
     }
   ]
 }

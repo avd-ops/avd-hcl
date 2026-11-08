@@ -1,6 +1,10 @@
-# Adapted from avd-landing-zone (MIT, commit 91c7acf), bicep/modules/monitoring.bicep; see
-# CREDITS.md and NOTICE. Changes: written in Terraform; the alert rules and action group come
-# in a later phase.
+# Adapted from avd-landing-zone (MIT, commit 91c7acf), bicep/modules/monitoring.bicep and governance.bicep.
+# Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), modules/avd-insights; see CREDITS.md and NOTICE.
+# Changes: written in Terraform; optional action group and subscription consumption budget.
+
+locals {
+  deploy_budget = var.monthly_budget_amount != null && var.budget_start_date != null && var.subscription_id != null && length(var.alert_email_addresses) > 0
+}
 
 resource "azurerm_log_analytics_workspace" "avd" {
   name                         = var.name
@@ -83,5 +87,52 @@ resource "azurerm_monitor_data_collection_rule" "avd_insights" {
         "Microsoft-FSLogix-Apps/Admin!*[System[(Level=2 or Level=3 or Level=4 or Level=0)]]",
       ]
     }
+  }
+}
+
+resource "azurerm_monitor_action_group" "avd" {
+  count               = length(var.alert_email_addresses) > 0 ? 1 : 0
+  name                = "ag-${var.prefix}-avd"
+  resource_group_name = var.resource_group_name
+  short_name          = substr("avd${replace(var.prefix, "-", "")}", 0, 12)
+  tags                = var.tags
+
+  dynamic "email_receiver" {
+    for_each = toset(var.alert_email_addresses)
+    content {
+      name                    = "ops-${substr(sha1(email_receiver.value), 0, 6)}"
+      email_address           = email_receiver.value
+      use_common_alert_schema = true
+    }
+  }
+}
+
+resource "azurerm_consumption_budget_subscription" "avd" {
+  count           = local.deploy_budget ? 1 : 0
+  name            = "budget-${var.prefix}"
+  subscription_id = var.subscription_id
+  amount          = var.monthly_budget_amount
+  time_grain      = "Monthly"
+
+  time_period {
+    start_date = var.budget_start_date
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 80
+    operator       = "GreaterThan"
+    threshold_type = "Actual"
+    contact_emails = var.alert_email_addresses
+    contact_groups = [azurerm_monitor_action_group.avd[0].id]
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThan"
+    threshold_type = "Forecasted"
+    contact_emails = var.alert_email_addresses
+    contact_groups = [azurerm_monitor_action_group.avd[0].id]
   }
 }

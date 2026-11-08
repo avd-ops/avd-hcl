@@ -1,0 +1,7 @@
+# Copy to backend.hcl (git-ignored). Bootstrap creates this account; use_azuread_auth keeps
+# storage keys out of it.
+resource_group_name  = "rg-tfstate"
+storage_account_name = "sttfstate00000"
+container_name       = "tfstate"
+key                  = "avd/example/images.tfstate"
+use_azuread_auth     = true

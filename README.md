@@ -7,8 +7,11 @@ Native Azure Virtual Desktop, deployed and operated with the HashiCorp stack: Te
 estate, Packer for golden images, Azure Key Vault and managed identities for secrets (no Vault
 server, decision 0004), and Ansible only if it turns out to earn its place. No vendor management plane sits in the path.
 
-**Status: phase 1, built and tested offline only.** The platform stage builds one pooled,
-Entra-joined host pool with FSLogix, autoscale and AVD Insights; it has not run against Azure yet.
+**Status: phases 1–3, built and tested offline only.** The platform stage builds pooled or
+personal Entra-joined host pools with FSLogix, autoscale (or Start VM on Connect), blue/green
+host rotation, optional daily auto-shutdown, optional monthly budgets and AVD Insights; the
+images stage and Packer template build the Compute Gallery and golden image with WDOT; nothing
+has run against Azure yet.
 The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is built is
 [docs/knowledge/platform.md](docs/knowledge/platform.md).
 
@@ -16,8 +19,10 @@ The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is 
 
 | Path | What |
 |---|---|
-| `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts, and run-secrets for the values that never touch state. Each has `tests/` for `terraform test`, except run-secrets, tested through the root |
+| `modules/` | One module per role: foundation, network, fslogix-storage, key-vault, monitoring, control-plane, session-hosts, image-gallery, and run-secrets for the values that never touch state. Each has `tests/` for `terraform test`, except run-secrets, tested through the root |
 | `environments/example/01-platform/` | The platform root that wires the modules together; copy it per environment |
+| `environments/example/02-images/` | The Compute Gallery root for golden images; copy it per environment |
+| `packer/avd-win11/` | Packer golden-image template (Windows 11 Enterprise multi-session + Microsoft 365 Apps + WDOT) |
 | `schema/parameters.json` | The one list of deployment parameters behind every front door |
 | `scripts/schema/` | The schema check CI runs, and `answers.py` (`init` asks the questions, `render` writes the tfvars) |
 | `modules/deploy-pipeline/`, `environments/example/00-pipeline/` | The gated pipeline: state storage, plan and apply identities, GitHub environments |

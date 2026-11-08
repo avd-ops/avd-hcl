@@ -19,7 +19,7 @@
 # repository's Actions logs are public.
 #
 # Inputs (set by the workflow from the GitHub environment's secrets):
-#   STAGE                    platform | preflight
+#   STAGE                    platform | images | preflight
 #   AVD_ENV                  sandbox | dev | prod
 #   ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_ID
 #   TFSTATE_RESOURCE_GROUP TFSTATE_STORAGE_ACCOUNT
@@ -31,8 +31,9 @@ action="${1:-}"
 case "$action" in plan | apply) ;; *) echo "usage: $0 plan|apply" >&2; exit 64 ;; esac
 case "${STAGE:-}" in
   platform) dir_name=01-platform ;;
+  images) dir_name=02-images ;;
   preflight) dir_name=01-platform ;; # checks the answers the platform stage would use
-  *) echo "STAGE must be platform or preflight" >&2; exit 64 ;;
+  *) echo "STAGE must be platform, images or preflight" >&2; exit 64 ;;
 esac
 [ "$STAGE" != preflight ] || [ "$action" = plan ] || { echo "preflight only plans" >&2; exit 64; }
 [[ "${AVD_ENV:-}" =~ ^[a-z][a-z0-9-]{1,20}$ ]] || { echo "AVD_ENV is missing or malformed" >&2; exit 64; }

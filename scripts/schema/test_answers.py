@@ -94,8 +94,32 @@ class AnswersTest(unittest.TestCase):
     def test_render_writes_the_output_file(self):
         with tempfile.TemporaryDirectory() as d:
             written = answers.render(self.schema, {"user_groups": [USERS]}, Path(d), source=source, group=group)
-            self.assertEqual([p.name for p in written], ["setup.auto.tfvars.json"])
+            self.assertEqual([p.name for p in written], ["setup.auto.tfvars.json", "setup.auto.tfvars.json"])
             self.assertEqual(json.loads(written[0].read_text())["host_count"], 1)
+            self.assertEqual(json.loads(written[1].read_text())["prefix"], "avd-sandbox")
+
+    def test_day_2_parameters_and_images_stage(self):
+        resolved = self.resolve({
+            "user_groups": [USERS],
+            "host_pool_type": "Personal",
+            "personal_assignment_type": "Direct",
+            "host_generation": "a",
+            "auto_shutdown_time": "2200",
+            "alert_email_addresses": ["ops@contoso.com"],
+            "monthly_budget_amount": 250,
+            "budget_start_date": "2026-11-01T00:00:00Z",
+        })
+        stages = answers.tfvars(self.schema, resolved)
+        self.assertEqual(stages["platform"]["host_pool_type"], "Personal")
+        self.assertEqual(stages["platform"]["personal_assignment_type"], "Direct")
+        self.assertEqual(stages["platform"]["host_generation"], "a")
+        self.assertEqual(stages["platform"]["auto_shutdown_time"], "2200")
+        self.assertEqual(stages["platform"]["monthly_budget_amount"], 250)
+        self.assertEqual(stages["images"]["prefix"], "avd-sandbox")
+        import check
+        for stage, folder in [("platform", "01-platform"), ("images", "02-images")]:
+            declared = check.root_variables(answers.ROOT / "environments" / "example" / folder)
+            self.assertEqual(sorted(set(stages[stage]) - set(declared)), [])
 
     def test_render_pins_the_environment(self):
         with tempfile.TemporaryDirectory() as d:

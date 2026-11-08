@@ -150,8 +150,10 @@ sandbox run.
    schema, and tflint. 2b built 2026-10-22 ([readiness.md](readiness.md)): the readiness engine
    with the Nerdio checks removed and the AVD ones added, also a `preflight` stage in the Deploy
    workflow. Verify checks come with the first sandbox run, after an estimate and the owner's go.
-3. **Day 2.** Scaling plans, auto shutdown and budget, host rotation, Packer image stage and
-   gallery pin, personal pools with Start VM on Connect.
+3. **Day 2.** Built offline ([platform.md](platform.md)): personal host pools with Start VM on
+   Connect, daily VM auto-shutdown and monthly budget + alert action group, blue/green
+   `host_generation` rotation, the `02-images` Compute Gallery stage, and `packer/avd-win11` with
+   WDOT event-log verification (landing zone lesson 0031).
 4. **Chat front door.** The assistant over the same schema and pipeline, handover runbook.
 5. **Later.** AD DS and Entra DS join, hardening (private endpoints, self-hosted runner), session
    host configuration opt-in, RemoteApp groups, Azure Government.

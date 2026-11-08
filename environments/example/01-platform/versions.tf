@@ -41,7 +41,9 @@ provider "azurerm" {
   resource_provider_registrations = "none"
   resource_providers_to_register = [
     "Microsoft.Compute",
+    "Microsoft.Consumption",
     "Microsoft.DesktopVirtualization",
+    "Microsoft.DevTestLab",
     "Microsoft.GuestConfiguration",
     "Microsoft.Insights",
     "Microsoft.KeyVault",

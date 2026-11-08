@@ -8,9 +8,11 @@ last_reviewed: 2026-10-21
 
 # Platform stage: modules and gotchas
 
-`environments/example/01-platform` builds one pooled, Entra-joined host pool in one apply, from the
-modules in `modules/`. Everything is tested offline with `terraform test` and mocked providers; it
-has not run against Azure yet (that needs a written estimate and the owner's exact go).
+`environments/example/01-platform` builds a pooled or personal Entra-joined host pool in one apply,
+from the modules in `modules/`, and `environments/example/02-images` builds the Azure Compute
+Gallery that `packer/avd-win11` publishes golden images into. Everything is tested offline with
+`terraform test` and mocked providers; it has not run against Azure yet (that needs a written
+estimate and the owner's exact go).
 
 | Module | What it builds | Comes from |
 |---|---|---|
@@ -18,9 +20,10 @@ has not run against Azure yet (that needs a written estimate and the owner's exa
 | `network` | Spoke VNet, session host and private endpoint subnets, NSGs, privatelink zones, optional hub peering, NAT gateway | nerdio-hcl `modules/network` |
 | `fslogix-storage` | Premium Azure Files with Entra Kerberos, private endpoint, SMB roles, logs | nerdio-hcl `modules/fslogix-storage` |
 | `key-vault` | RBAC vault with purge protection and a private endpoint, holding the break-glass credential | avd-landing-zone `keyVault.bicep` |
-| `monitoring` | Log Analytics (Entra auth only) and the AVD Insights data collection rule | avd-landing-zone `monitoring.bicep` |
-| `control-plane` | Host pool, registration token, desktop app group, workspace, user assignment, scaling plan, diagnostics | avd-landing-zone `controlPlane.bicep` |
-| `session-hosts` | Trusted Launch VMs, a break-glass secret per host, Entra join (optional Intune), AMA, guest configuration, the two run commands, sign-in roles | avd-landing-zone `sessionHosts.bicep` and `scripts/sessionhost/` |
+| `monitoring` | Log Analytics (Entra auth only), AVD Insights data collection rule, optional alert action group and monthly subscription budget | avd-landing-zone `monitoring.bicep` and `budget.bicep` |
+| `control-plane` | Pooled or Personal host pool, registration token, desktop app group, workspace, user assignment, pooled scaling plan, diagnostics | avd-landing-zone `controlPlane.bicep` |
+| `session-hosts` | Trusted Launch VMs with blue/green `host_generation` naming, a break-glass secret per host, Entra join (optional Intune), AMA, guest configuration, the two run commands, optional daily auto-shutdown, sign-in roles | avd-landing-zone `sessionHosts.bicep`, `autoShutdown.bicep` and `scripts/sessionhost/` |
+| `image-gallery` | Azure Compute Gallery and Trusted Launch image definition for `02-images` and `packer/avd-win11` | nerdio-hcl `modules/image-gallery` and avd-landing-zone `imagePipeline.bicep` |
 | `run-secrets` | The run's ephemeral values: a new break-glass password and the host pool's registration token | New |
 
 The parameter schema (`schema/parameters.json`) answers the root's variables; `scripts/schema/check.py`
@@ -40,9 +43,19 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   written once, because Azure applies it only at creation.
 - **Extensions and run commands ignore later changes** (lesson 0026): rewriting them fails on a
   host autoscale has deallocated. A new token, tag or FSLogix setting reaches hosts by rebuilding
-  them (host rotation, a later phase).
+  them via `host_generation` (`""`, `"a"`, or `"b"`).
 - **Key Vault and Log Analytics soft delete** (lessons 0022 and 0023): the provider recovers a
   soft-deleted vault and deletes the workspace permanently on destroy.
+- **WDOT silent failure when its event log is missing** (lesson 0031): `packer/avd-win11/scripts/03-wdot.ps1`
+  creates the `WDOT` classic event log before running `Windows_VDOT.ps1` and checks for the
+  `HKLM:\SOFTWARE\WDOT` marker key afterward so a silent skip fails the image build.
+- **Personal host pools skip the pooled scaling plan**: `control-plane` sets `Persistent` load
+  balancing, `Automatic` or `Direct` personal assignment, `maximum_sessions_allowed = 1`, and
+  `start_vm_on_connect = true`, while skipping `azurerm_virtual_desktop_scaling_plan` unless the
+  pool is `Pooled`.
+- **Blue/green host naming stays within the 15-character NetBIOS limit**: `session-hosts` appends
+  `host_generation` (`"a"` or `"b"`) after `substr(name_prefix, 0, 10)` so `<prefix><gen>-NNN`
+  never exceeds 15 characters.
 
 ## Gotchas found while writing it
 

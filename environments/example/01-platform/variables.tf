@@ -122,6 +122,26 @@ variable "host_pool_friendly_name" {
   default     = null
 }
 
+variable "host_pool_type" {
+  description = "Pooled (shared multi-session hosts) or Personal (one host per user, with Start VM on Connect)."
+  type        = string
+  default     = "Pooled"
+  validation {
+    condition     = contains(["Pooled", "Personal"], var.host_pool_type)
+    error_message = "host_pool_type must be Pooled or Personal."
+  }
+}
+
+variable "personal_assignment_type" {
+  description = "How personal desktops are assigned when host_pool_type is Personal: Automatic or Direct."
+  type        = string
+  default     = "Automatic"
+  validation {
+    condition     = contains(["Automatic", "Direct"], var.personal_assignment_type)
+    error_message = "personal_assignment_type must be Automatic or Direct."
+  }
+}
+
 variable "workspace_friendly_name" {
   description = "Workspace name users see in the Windows App feed."
   type        = string
@@ -150,6 +170,26 @@ variable "vm_prefix" {
   description = "Session host name prefix, up to 11 characters."
   type        = string
   default     = "avdsh"
+}
+
+variable "host_generation" {
+  description = "Host generation for blue/green rotation: empty keeps <vm_prefix>-NNN; a or b gives substr(vm_prefix, 0, 10) + generation."
+  type        = string
+  default     = ""
+  validation {
+    condition     = contains(["", "a", "b"], var.host_generation)
+    error_message = "host_generation must be empty, a or b."
+  }
+}
+
+variable "auto_shutdown_time" {
+  description = "Daily VM auto-shutdown time in HHmm (24-hour, in time_zone), for example 2000. Null disables the per-host shutdown schedule."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.auto_shutdown_time == null || can(regex("^([01][0-9]|2[0-3])[0-5][0-9]$", var.auto_shutdown_time))
+    error_message = "auto_shutdown_time must be 4 digits in 24-hour HHmm format, such as 2000, or null."
+  }
 }
 
 variable "vm_size" {
@@ -214,4 +254,30 @@ variable "log_retention_days" {
   description = "Log Analytics retention in days."
   type        = number
   default     = 30
+}
+
+variable "alert_email_addresses" {
+  description = "Email addresses for monitoring and budget notifications. Empty skips the action group and budget."
+  type        = list(string)
+  default     = []
+}
+
+variable "monthly_budget_amount" {
+  description = "Monthly cost budget in the subscription's billing currency. Null skips the budget."
+  type        = number
+  default     = null
+  validation {
+    condition     = var.monthly_budget_amount == null || var.monthly_budget_amount > 0
+    error_message = "monthly_budget_amount must be greater than 0, or null."
+  }
+}
+
+variable "budget_start_date" {
+  description = "First of a month in RFC3339 UTC (YYYY-MM-01T00:00:00Z) for the monthly budget."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.budget_start_date == null || can(regex("^[0-9]{4}-[0-9]{2}-01T00:00:00Z$", var.budget_start_date))
+    error_message = "budget_start_date must be the first of a month in YYYY-MM-01T00:00:00Z format, or null."
+  }
 }
