@@ -1,6 +1,7 @@
 # Daily drift check for this repository's GitHub settings (docs/knowledge/github-settings-spec.md,
 # section 9). It plans, reports, and never applies: there is no apply step, and the plan job's
-# GitHub token can only read. Inert until the bootstrap sets the repository variables.
+# GitHub token can only read. Until the bootstrap sets the repository variables it skips cleanly,
+# with the setup steps in the run summary.
 name: GitHub drift
 
 on:
@@ -15,9 +16,38 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Is the check set up? None of the variables: skip cleanly, say how to set it up, and close a
+  # stale "check failed" issue. Some but not all: report a failure naming the missing ones, so a
+  # half-finished setup is never silent.
+  precheck:
+    name: Configured?
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the pre-check script
+      issues: write # closes a stale "check failed" issue when the check isn't set up
+    outputs:
+      state: ${{ steps.check.outputs.state }}
+      missing: ${{ steps.check.outputs.missing }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the repository variables
+        id: check
+        env:
+          DRIFT_KEY_URL: ${{ vars.DRIFT_KEY_URL }}
+          DRIFT_CLIENT_ID: ${{ vars.DRIFT_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+          TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: github/scripts/drift_precheck.sh
+
   plan:
     name: Plan
-    if: github.ref == 'refs/heads/main' && vars.DRIFT_KEY_URL != ''
+    needs: precheck
+    if: needs.precheck.outputs.state == 'ready'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -93,8 +123,9 @@ jobs:
 
   report:
     name: Report
-    needs: plan
-    if: always() && github.ref == 'refs/heads/main' && vars.DRIFT_KEY_URL != ''
+    needs: [precheck, plan]
+    # After the plan, whatever its result; or when the setup is half done, to report that.
+    if: always() && needs.precheck.result == 'success' && needs.precheck.outputs.state != 'unset'
     runs-on: ubuntu-latest
     permissions:
       issues: write # the drift issue only; no Azure, no App token here
@@ -109,17 +140,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MISSING: ${{ needs.precheck.outputs.missing }}
         shell: bash
         run: |
           set -euo pipefail
           outcome=$(cat drift/outcome 2>/dev/null || echo failed)
           step=$(cat drift/failed-step 2>/dev/null || echo "before plan")
-          issue=$(gh issue list --label drift --state open --json number --jq '.[0].number // empty')
+          if [ -n "$MISSING" ]; then step="setup: repository variables not set: $MISSING"; fi
           if [ "$outcome" = clean ]; then
-            if [ -n "$issue" ]; then
+            # Clean closes both kinds: drift found earlier and a failure that kept the check from running.
+            open=$(gh issue list --label drift --state open --json number --jq '.[].number')
+            for issue in $open; do
               gh issue comment "$issue" --body "Clean: GitHub settings match github/ again ($RUN_URL)."
               gh issue close "$issue" --reason completed
-            fi
+            done
             echo "Clean."
             exit 0
           fi
@@ -138,6 +172,18 @@ jobs:
             title="GitHub settings drift check failed"
             text="The drift check didn't finish, so drift may be unreported."
           fi
+          # The check ran again, so an open failure issue is over.
+          if [ "$outcome" = drift ]; then
+            failed=$(gh issue list --label drift --state open --json number,title \
+              --jq 'map(select(.title == "GitHub settings drift check failed")) | .[].number')
+            for issue in $failed; do
+              gh issue comment "$issue" --body "The drift check runs again ($RUN_URL); drift, if any, is in its own issue."
+              gh issue close "$issue" --reason completed
+            done
+          fi
+          # One issue per kind, found by title, so a failure never lands on (or renames) a drift issue.
+          issue=$(TITLE="$title" gh issue list --label drift --state open --json number,title \
+            --jq 'map(select(.title == env.TITLE)) | .[0].number // empty')
           # Comment again only when the plan itself changes, attributes included (refresh lines carry
           # nothing that changes from day to day, but are dropped to be safe).
           hash=$( { echo "$outcome $changes"; cat drift/plan-*.txt 2>/dev/null | grep -vE 'Refreshing state|Reading\.\.\.|Read complete|Preparing import|Importing from ID' || true; } | sha256sum | cut -c1-16)

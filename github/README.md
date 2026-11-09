@@ -9,7 +9,8 @@ settings and their sources: [conventions.md](conventions.md).
 - `scripts/app_token.py`: a short-lived GitHub App token, signed by a Key Vault key that can't be
   read back. Used by the drift check, and by your applies once the bootstrap is done.
 - `.github/workflows/github-drift.yml`: the daily read-only plan that opens a `drift` issue. It
-  stays off until the bootstrap sets the repository variables, and it never applies.
+  skips cleanly until the bootstrap sets the repository variables (the run summary lists them),
+  and it never applies.
 
 Nothing here runs without you. Applies happen only from Cloud Shell, by you.
 
