@@ -27,7 +27,7 @@ variable "topics" {
 }
 
 variable "required_checks" {
-  description = "Status checks the ruleset requires on main: the display names of CI jobs that report on every pull request. A check that never reports holds every pull request (ai-brain 0014, section 3)."
+  description = "Status checks the ruleset requires on main: the display names of CI jobs that report on every pull request. A check that never reports holds every pull request (decision 0015, section 3)."
   type        = list(string)
   validation {
     condition     = length(var.required_checks) > 0
@@ -42,7 +42,7 @@ variable "enforce_ruleset" {
 }
 
 variable "kb_auto_merge" {
-  description = "Turn on 'Allow auto-merge' and require the kb-auto-merge workflow's auto-merge check, together, as ai-brain 0014 section 3 requires. Only once that workflow is installed here."
+  description = "Turn on 'Allow auto-merge' and require the kb-auto-merge workflow's auto-merge check, together, as decision 0015 section 3 requires. Only once that workflow is installed here."
   type        = bool
   default     = false
   validation {

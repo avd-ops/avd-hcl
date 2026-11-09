@@ -5,7 +5,7 @@ module "settings" {
   source = "../../modules/repo-settings"
 
   repository  = "avd-hcl"
-  visibility  = "private"
+  visibility  = "public"
   description = "Native Azure Virtual Desktop with Terraform and Packer"
   topics      = ["azure-virtual-desktop", "terraform", "packer", "azure", "infrastructure-as-code"]
 
@@ -13,8 +13,7 @@ module "settings" {
   # this list in the same pull request.
   required_checks = ["Terraform", "Parameter schema", "Guard", "gitleaks"]
 
-  # Off until the owner is on GitHub Pro or the repository is public (spec, Q2).
-  enforce_ruleset = false
+  enforce_ruleset = true
 }
 
 output "ruleset_id" {

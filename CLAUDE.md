@@ -10,8 +10,6 @@ The plan is `docs/knowledge/port-plan.md`; decisions are in `docs/knowledge/deci
 
 ## Rules
 - Read [docs/guardrails.md](docs/guardrails.md) before changing anything.
-- **Private for now.** Never name this repo, or link it, from a public repo, issue or PR until
-  the owner makes it public.
 - **avd-landing-zone stays fully separate.** It never depends on this kit, and nothing here
   writes to it. Reuse its design and lessons freely, with credit.
 - **Credit what you take.** A reused file keeps a header naming its source; every reuse gets a

@@ -22,7 +22,7 @@ Nothing here runs without you. Applies happen only from Cloud Shell, by you.
 2. Paste this block in Cloud Shell (Bash) and paste the token when it asks. Nothing is echoed.
 
 ```bash
-cd ~ && { [ -d avd-hcl ] && git -C avd-hcl pull -q || gh repo clone nickprignano/avd-hcl; } \
+cd ~ && { [ -d avd-hcl ] && git -C avd-hcl pull -q || gh repo clone avd-ops/avd-hcl; } \
   && cd ~/avd-hcl/github/repos/avd-hcl \
   && read -rsp "Read-only token: " GITHUB_TOKEN && echo && export GITHUB_TOKEN \
   && terraform init -input=false -no-color >/dev/null \

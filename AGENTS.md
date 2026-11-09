@@ -8,8 +8,8 @@ the more specific rule wins, and the owner's own words win over all of them.
 ## How to make a change
 
 Four rules after the community "Karpathy guidelines" (MIT), reworded for agents that work unattended.
-Every repo worked on with Claude carries this section, and its `CLAUDE.md` imports this file
-([ai-brain decision 0020](https://github.com/nickprignano/ai-brain/blob/main/docs/knowledge/decisions/0020-agents-md-in-every-repo.md)).
+Every repo worked on with Claude carries this section, and its `CLAUDE.md` imports this file (hub
+decision 0020).
 
 - Say what you assumed. When the ask leaves a detail open, pick the reasonable default, say which,
   and keep going. Stop to ask only when the choice changes the goal, something the owner will
@@ -76,6 +76,8 @@ These hold in every AVD repo. The repo's own rules below and in CLAUDE.md add to
 
 - **avd-landing-zone** deploys and operates the AVD estate (Bicep, PowerShell). With
   avd-current-state it is a self-contained pair that never depends on the layers above.
+- **avd-hcl** deploys and operates the AVD estate with Terraform and Packer, in its own HCL lane
+  beside the landing zone.
 - **avd-current-state** collects and validates what is deployed (facts, drift, reports).
 - **avd-assess** is the map and the dictionary: method, standards and the shared contracts.
 - **avd-second-brain** is the family knowledge base and reasoning; it never holds a write credential.
@@ -96,10 +98,3 @@ Read [CLAUDE.md](CLAUDE.md) and [docs/guardrails.md](docs/guardrails.md) first. 
 - Before building something new, check what exists (Azure Verified Modules, nerdio-hcl,
   avd-landing-zone) and record what you learned in `docs/knowledge/`.
 - When code changes, record what was learned in `docs/knowledge/` in the same PR.
-
-## Private repo
-
-This repo is private. Never name it, link it or describe what it holds from a public repo, issue
-or PR. Potentially paid work is research only: say "potentially paid", never "the product".
-The owner's working notes for agents (repo roles, open plans, decisions, standing rules) are in
-the private tenant-swarm repo, `docs/agent-handover.md`.

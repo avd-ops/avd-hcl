@@ -25,5 +25,5 @@ page, not a copy.
 - [github-settings-spec.md](github-settings-spec.md): this repository's GitHub settings as
   Terraform in `github/`, with a read-only drift check (proposed).
 
-avd-hcl is a standalone project, not part of the avd-ops family. KB tooling (index generation,
+avd-hcl is the HCL-lane repo in the avd-ops family. KB tooling (index generation,
 validation, prior-art and freshness checks) may be added later; it isn't installed yet.

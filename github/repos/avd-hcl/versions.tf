@@ -13,5 +13,5 @@ terraform {
 # The token comes from GITHUB_TOKEN in the environment, set for one process only: a short-lived
 # fine-grained token for the first plan and apply, then a GitHub App token Key Vault signs for.
 provider "github" {
-  owner = "nickprignano"
+  owner = "avd-ops"
 }
