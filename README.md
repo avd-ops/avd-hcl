@@ -1,5 +1,7 @@
 # avd-hcl
 
+Part of [avd-ops](https://avd-ops.dev/), the open toolkit for Azure Virtual Desktop.
+
 > **Personal project, not for production.** Provided as is, with no warranty. Not affiliated with
 > or endorsed by the author's employer, Microsoft, HashiCorp or Nerdio.
 
@@ -34,7 +36,7 @@ The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is 
 From Cloud Shell, with no Azure changes (mock providers only):
 
 ```bash
-git clone https://github.com/nickprignano/avd-hcl.git && cd avd-hcl
+git clone https://github.com/avd-ops/avd-hcl.git && cd avd-hcl
 for d in modules/*/ environments/example/*/; do [ -d "$d/tests" ] && (cd "$d" && terraform init -backend=false >/dev/null && terraform test); done
 python3 scripts/schema/check.py && python3 -m unittest discover -s scripts/schema
 python3 -m unittest discover -s scripts/readiness -t scripts

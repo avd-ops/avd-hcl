@@ -110,7 +110,7 @@ jobs:
           fi
           exit $fail
       - name: Shell scripts
-        run: shellcheck scripts/pipeline/*.sh
+        run: shellcheck scripts/pipeline/*.sh github/scripts/*.sh
 
   # Secret scanning over full history. The local pre-commit hook in .githooks/ is the primary
   # control. The gitleaks CLI is used instead of the action, which scans only the event's commit

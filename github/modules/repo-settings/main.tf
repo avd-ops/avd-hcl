@@ -5,12 +5,12 @@
 # never to this module.
 
 locals {
-  # Labels from ai-brain decisions 0011 (no-kb), 0012 (handoff, handoff-proposed, same colors as
-  # ai-brain's kb-freshness workflow) and 0014 (no-auto-merge); drift is the drift check's label.
+  # Labels from avd-second-brain decisions 0013 (no-kb), 0014 (handoff, handoff-proposed, same colors
+  # as the kb-freshness workflow) and 0015 (no-auto-merge); drift is the drift check's label.
   labels = merge({
     "no-kb"            = { color = "e4e669", description = "Code change with no knowledge base entry; the PR body says why" }
     "no-auto-merge"    = { color = "d93f0b", description = "Keep this pull request for the owner" }
-    "handoff"          = { color = "0052cc", description = "Owner-approved handoff from another project (ai-brain 0012)" }
+    "handoff"          = { color = "0052cc", description = "Owner-approved handoff from another project (decision 0014)" }
     "handoff-proposed" = { color = "c5def5", description = "Handoff a project proposed; waits for the owner" }
     "drift"            = { color = "fbca04", description = "GitHub settings differ from github/ (drift check)" }
   }, var.extra_labels)
@@ -115,7 +115,7 @@ resource "github_repository_ruleset" "main" {
     }
   }
 
-  # The owner can still merge a pull request whose checks never ran (ai-brain 0014, section 3).
+  # The owner can still merge a pull request whose checks never ran (decision 0015, section 3).
   bypass_actors {
     actor_id    = local.repository_admin_role_id
     actor_type  = "RepositoryRole"

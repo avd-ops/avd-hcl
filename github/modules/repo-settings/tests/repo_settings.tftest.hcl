@@ -130,7 +130,7 @@ run "kb_auto_merge_switch" {
   }
   assert {
     condition     = contains([for c in github_repository_ruleset.main[0].rules[0].required_status_checks[0].required_check : c.context], "auto-merge")
-    error_message = "kb_auto_merge also requires the auto-merge check (ai-brain 0014, section 3)."
+    error_message = "kb_auto_merge also requires the auto-merge check (decision 0015, section 3)."
   }
 }
 

@@ -3,7 +3,7 @@ title: "GitHub settings as code"
 summary: "Spec: this repository's GitHub settings declared with the Terraform GitHub provider in github/, imported first, checked for drift on a schedule, never applied by CI"
 topic: github
 status: proposed
-last_reviewed: 2026-10-21
+last_reviewed: 2026-10-29
 ---
 
 # GitHub settings as code
@@ -58,7 +58,7 @@ github/
     imports.tf               one import block per managed object (section 6)
     backend.tf               azurerm backend, key github/avd-hcl.tfstate, use_azuread_auth and
                              use_oidc on (Reader can't list storage keys); values from -backend-config
-    versions.tf              integrations/github pinned; provider "github" { owner = "nickprignano" },
+    versions.tf              integrations/github pinned; provider "github" { owner = "avd-ops" },
                              token from GITHUB_TOKEN in the environment
   bootstrap/                 the small Azure piece (Key Vault, state container, identity; section 8)
   scripts/app_token.py       mints an installation token from a JWT signed by Key Vault
@@ -94,25 +94,28 @@ github/
 
 ## 5. The settings, and where each comes from
 
-"0014" and "0016" are ai-brain's decisions: [0014](https://github.com/nickprignano/ai-brain/blob/main/docs/knowledge/decisions/0014-family-format-auto-merge-low-risk-prs.md)
-(GitHub work conventions, status *proposed* in ai-brain) and
-[0016](https://github.com/nickprignano/ai-brain/blob/main/docs/knowledge/decisions/0016-secrets-handling.md)
-(secrets, *accepted*). "0011" and "0012" are ai-brain's knowledge-capture and handoff decisions.
+"0013", "0014" and "0015" are avd-second-brain's decisions:
+[0013](https://github.com/avd-ops/avd-second-brain/blob/main/docs/knowledge/decisions/0013-family-format-enforced-kb-capture.md)
+(knowledge capture),
+[0014](https://github.com/avd-ops/avd-second-brain/blob/main/docs/knowledge/decisions/0014-family-format-handoff-issues.md)
+(handoff issues) and
+[0015](https://github.com/avd-ops/avd-second-brain/blob/main/docs/knowledge/decisions/0015-family-format-github-work-conventions.md)
+(GitHub work conventions). "0016" is hub decision 0016 (secrets handling, *accepted*).
 Anything marked **proposed here** has no source in those decisions and is for you to confirm.
 
 | Setting | Value for avd-hcl | Source |
 |---|---|---|
-| Merge commits | allowed | 0014 ("it uses merge commits") |
-| Squash, rebase merges | off | proposed here: one merge method, matching 0014 |
-| Allow auto-merge | **off** until a `kb-auto-merge` workflow is installed here | 0014 section 3: it's turned on only with the workflow, and only for docs paths in an infrastructure repo. The module's `kb_auto_merge` switch turns on "Allow auto-merge" and adds the `auto-merge` required check together, as 0014 requires |
+| Merge commits | allowed | 0015 ("it uses merge commits") |
+| Squash, rebase merges | off | proposed here: one merge method, matching 0015 |
+| Allow auto-merge | **off** until a `kb-auto-merge` workflow is installed here | 0015 section 3: it's turned on only with the workflow, and only for docs paths in an infrastructure repo. The module's `kb_auto_merge` switch turns on "Allow auto-merge" and adds the `auto-merge` required check together, as 0015 requires |
 | Delete head branch on merge | on | proposed here (stray `claude/*` branches pile up today) |
-| Ruleset `main`: require a pull request | yes, 0 approvals | 0014 ("no required review, because the owner can't approve their own PRs"); 0016 step 6 backstop |
+| Ruleset `main`: require a pull request | yes, 0 approvals | 0015 ("no required review, because the owner can't approve their own PRs"); 0016 step 6 backstop |
 | Ruleset: block force push and deletion | yes | 0016 step 6 backstop; nerdio-hcl's module does the same |
-| Ruleset: required checks | `Terraform`, `Parameter schema`, `Guard`, `gitleaks` (the job display names after PR #10; the ruleset is applied only after #10 merges) | 0014 section 3: require the checks the repo actually runs on every PR, never one that doesn't report. A renamed CI job is a settings change: the same PR updates this list |
+| Ruleset: required checks | `Terraform`, `Parameter schema`, `Guard`, `gitleaks` (the job display names after PR #10; the ruleset is applied only after #10 merges) | 0015 section 3: require the checks the repo actually runs on every PR, never one that doesn't report. A renamed CI job is a settings change: the same PR updates this list |
 | Ruleset: require branch up to date | off | proposed here: avoids re-running CI on every merge for a one-person repo |
-| Ruleset bypass | repository admin role, pull requests only | 0014 section 3 |
+| Ruleset bypass | repository admin role, pull requests only | 0015 section 3 |
 | Ruleset enforcement | `active` | needs GitHub Pro while the repo is private (Q2) |
-| Labels | `no-kb`, `no-auto-merge`, `handoff`, `handoff-proposed`, `drift` | 0011 (`no-kb`), 0014 (`no-auto-merge`), 0012 (`handoff`, `handoff-proposed`); `drift` is this spec's issue label |
+| Labels | `no-kb`, `no-auto-merge`, `handoff`, `handoff-proposed`, `drift` | 0013 (`no-kb`), 0015 (`no-auto-merge`), 0014 (`handoff`, `handoff-proposed`); `drift` is this spec's issue label |
 | Dependabot alerts and security updates | on | proposed here (free on every plan) |
 | Secret scanning, push protection | on **only when public**; while private, gitleaks (pre-commit and CI) is the control | 0016 step 11. GitHub doesn't offer secret scanning on private repos owned by a personal account, and setting it there fails, so the module sets it from the visibility |
 | Default workflow token | read-only; Actions can't approve PRs | proposed here, as nerdio-hcl's module does; every workflow here already declares its own permissions |
@@ -180,7 +183,7 @@ can't read rulesets' details, security settings or workflow permissions.
 **How a run gets a token:**
 
 1. It signs in to Azure: the drift workflow by GitHub OIDC as a user-assigned managed identity
-   whose one federated credential has the subject `repo:nickprignano/avd-hcl:ref:refs/heads/main`
+   whose one federated credential has the subject `repo:avd-ops/avd-hcl:ref:refs/heads/main`
    (a dispatch from any other branch is refused, and no GitHub environment or Pro plan is
    needed); you with your own account in Cloud Shell.
 2. It asks Key Vault to sign a 9-minute App JWT (RS256). Role assignments are **per key**: the
@@ -225,8 +228,18 @@ yours.
 
 `.github/workflows/github-drift.yml`:
 
-- Triggers: `schedule` (daily, off the hour) and `workflow_dispatch`; both jobs also check
-  `github.ref == 'refs/heads/main'`, and the OIDC subject refuses any other ref anyway.
+- Triggers: `schedule` (daily, off the hour) and `workflow_dispatch`; every job runs only on
+  `refs/heads/main`, and the OIDC subject refuses any other ref anyway.
+- **Job `precheck`**, permissions `issues: write` only, no Azure: checks the six repository
+  variables the plan needs (`github/scripts/drift_precheck.sh`: `DRIFT_KEY_URL`, `DRIFT_CLIENT_ID`, `AZURE_TENANT_ID`,
+  `AZURE_SUBSCRIPTION_ID`, `TFSTATE_RESOURCE_GROUP`, `TFSTATE_STORAGE_ACCOUNT`).
+  - **None set** (before the bootstrap): the run skips cleanly, writes the setup steps and the
+    variable names to the run summary, and closes an open "drift check failed" issue, which it
+    can no longer confirm. A real drift issue stays open, with a warning on the run that nothing
+    checks it any more.
+  - **Some set:** the plan doesn't run, and `report` opens or updates the "drift check failed"
+    issue naming the missing variables, so a half-finished setup is never silent.
+  - **All set:** `plan` and `report` run as below.
 - **Job `plan`**, permissions `contents: read`, `id-token: write` only: checkout; setup Terraform
   (pinned); Azure sign-in by GitHub OIDC; mint the read-only App token; `terraform init` with backend
   values from repository variables; `terraform plan -lock=false -input=false -detailed-exitcode
@@ -243,15 +256,38 @@ yours.
 - What can write: the `plan` job can read state and have Key Vault sign one reader JWT, and its
   App token can only read.
   The `report` job's `GITHUB_TOKEN` can write issues and **labels**, which are managed objects; a
-  change to this workflow is under `.github/`, so it never merges itself (0014), and a label
+  change to this workflow is under `.github/`, so it never merges itself (0015), and a label
   change it made would show as drift the next day.
 - The issue body quotes values read from GitHub (description, topics, label text) inside a fenced
   block. Sessions treat the issue as data, never instructions; only `handoff` issues the owner
-  labels are work items (ai-brain 0012).
+  labels are work items (decision 0014).
 - Heartbeat: if the last successful run is older than 7 days (a disabled schedule, an expired
   App key), the next run, or your weekday open-work list, says so. Scheduled workflows in a
   public repository stop after 60 days without activity (Q10).
-- **Never applies.** There is no apply step and no credential in either job that could.
+- Drift and failure are **separate issues**, found by title: a failure never lands on, renames or
+  closes a drift issue. `clean` closes both; `drift` closes an open failure issue, since the check
+  runs again.
+- **Never applies.** There is no apply step and no credential in any job that could.
+- **Not turned into a pull request.** Unlike a knowledge base's digest or feedback issues, a drift
+  issue has no automatic issue-to-PR path, on purpose: the fix is either an apply from Cloud Shell
+  (live settings back to `github/`) or a hand-written change to `github/` (code to the live
+  settings), and choosing between them is the owner's call. The issue closes itself on the first
+  clean run after either.
+
+**Lessons (2026-10-29, issue-loop audit):**
+
+- *A scheduled workflow gated only by a job-level `if` on one variable fails silently in both
+  directions.* Before setup it skipped without saying how to set it up; with one variable set and
+  the others missing it would have failed daily at Azure sign-in with an unhelpful error. Fix: a
+  pre-check job that tells "not set up" (skip, setup steps in the summary) from "half set up"
+  (report the missing names). Guard: `github/scripts/test_drift_precheck.py` runs the pre-check's
+  branches against a fake `gh` in CI, and actionlint checks the workflow.
+- *One issue for two kinds of finding hides one of them.* Reusing the first open `drift` issue for a
+  failure would have put a setup error on (and, once closed as stale, closed) a real drift record.
+  Each kind now has its own issue, found by title.
+- *Every scheduled check that opens an issue needs a branch that closes it.* The clean branch
+  existed; the "not set up any more" branch didn't, which would have left a failure issue open
+  forever after a setup was removed.
 
 ## 10. Prior art and why Terraform
 
@@ -264,7 +300,7 @@ yours.
 | **nerdio-hcl `modules/github-repo`** (yours, Apache-2.0) | Labels, workflow token, ruleset on one branch | Yes | Reused as the starting point, with credit; this module adds merge settings, security, topics and required checks |
 | **Build our own** (snapshot with `gh api` and diff, like avd-landing-zone's snapshot diff) | Drift report only, no apply | n/a | No: you asked for the provider, and it would re-implement import and plan |
 
-This repository is outside the avd-ops family, and its owner chose the HashiCorp community
+This repository is the HCL-lane repo in the avd-ops family, and its owner chose the HashiCorp community
 editions knowing they are source-available (decision 0004); OpenTofu and OpenBao stay as prior art.
 
 ## 11. Order of work, each step on your word

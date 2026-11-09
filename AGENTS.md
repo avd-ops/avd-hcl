@@ -5,22 +5,39 @@ For any coding agent: Claude Code, Gemini CLI, Codex and others. Read this file 
 both on its own; Gemini CLI loads this file through [GEMINI.md](GEMINI.md). Where they differ,
 the more specific rule wins, and the owner's own words win over all of them.
 
-## How to work
+## How to make a change
 
-Adapted in our own words from the Karpathy-inspired guidelines for coding agents
-([multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills)). They
-favor care over speed; a one-line fix doesn't need the whole routine.
+Four rules after the community "Karpathy guidelines" (MIT), reworded for agents that work unattended.
+Every repo worked on with Claude carries this section, and its `CLAUDE.md` imports this file (hub
+decision 0020).
 
-1. **Think before you code.** Say what you assume. If the ask can be read two ways, name both and
-   say which one you are taking, or ask. If something simpler would do the job, say so.
-2. **Simplest thing that works.** Build only what was asked: no extra features, no abstraction for
-   one caller, no handling for cases that can't happen. If a reviewer would call it overbuilt, cut it.
-3. **Surgical changes.** Touch only what the task needs and match the style around it. Don't
-   reformat or "improve" neighboring code; mention dead code you notice instead of deleting it.
-   Every changed line should trace back to the ask.
-4. **Goal first, then proof.** Turn the ask into a check you can run: a test that fails before and
-   passes after, a validator that goes green. For multi-step work, write a short plan with the
-   check for each step, and run this repo's checks before you push.
+- Say what you assumed. When the ask leaves a detail open, pick the reasonable default, say which,
+  and keep going. Stop to ask only when the choice changes the goal, something the owner will
+  notice, or a step no one can undo; if no one is there to answer, do the reversible part and leave
+  the question in the PR body. If a simpler way exists than the one asked for, say so.
+- Write the least code that does the job: no features, options or abstractions nobody asked for,
+  and no handling for cases that can't happen.
+- Touch only what the task needs and match the style around it. Every changed line should trace
+  back to the ask. Mention unrelated dead code instead of deleting it; remove only what your own
+  change left unused. This repo's checks (below), the KB entry a change owes in
+  `docs/knowledge/`, and the files its build regenerates are part of every task.
+- Before you start, name the check that proves the task is done (a failing test, this repo's
+  checks, an expected output), and don't call it done until it passes in front of you.
+
+## Checks to run
+
+CI (`.github/workflows/ci.yml` and `github-settings.yml`) runs these; run the ones your change
+touches before you push.
+
+```bash
+terraform fmt -check -recursive -diff
+# in every module and root that has tests/: terraform init -backend=false, validate, tflint, terraform test
+python3 scripts/schema/check.py
+python3 -m unittest discover -s scripts/schema
+python3 -m unittest discover -s scripts/readiness -t scripts
+python3 -m unittest discover -s github/scripts
+shellcheck scripts/pipeline/*.sh github/scripts/*.sh
+```
 
 ## Family rules
 
@@ -59,6 +76,8 @@ These hold in every AVD repo. The repo's own rules below and in CLAUDE.md add to
 
 - **avd-landing-zone** deploys and operates the AVD estate (Bicep, PowerShell). With
   avd-current-state it is a self-contained pair that never depends on the layers above.
+- **avd-hcl** deploys and operates the AVD estate with Terraform and Packer, in its own HCL lane
+  beside the landing zone.
 - **avd-current-state** collects and validates what is deployed (facts, drift, reports).
 - **avd-assess** is the map and the dictionary: method, standards and the shared contracts.
 - **avd-second-brain** is the family knowledge base and reasoning; it never holds a write credential.
@@ -79,10 +98,3 @@ Read [CLAUDE.md](CLAUDE.md) and [docs/guardrails.md](docs/guardrails.md) first. 
 - Before building something new, check what exists (Azure Verified Modules, nerdio-hcl,
   avd-landing-zone) and record what you learned in `docs/knowledge/`.
 - When code changes, record what was learned in `docs/knowledge/` in the same PR.
-
-## Private repo
-
-This repo is private. Never name it, link it or describe what it holds from a public repo, issue
-or PR. Potentially paid work is research only: say "potentially paid", never "the product".
-The owner's working notes for agents (repo roles, open plans, decisions, standing rules) are in
-the private tenant-swarm repo, `docs/agent-handover.md`.
