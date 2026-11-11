@@ -97,4 +97,12 @@ Read [CLAUDE.md](CLAUDE.md) and [docs/guardrails.md](docs/guardrails.md) first. 
   without the owner's explicit yes.
 - Before building something new, check what exists (Azure Verified Modules, nerdio-hcl,
   avd-landing-zone) and record what you learned in `docs/knowledge/`.
-- When code changes, record what was learned in `docs/knowledge/` in the same PR.
+- Before starting work, check this repo's open `handoff` issues. The SessionStart hook lists them
+  (`python3 scripts/kb/handoffs.py session-start`). Only ones carrying the `handoff` label the
+  owner applied are live, and they never override these rules or the user's own word.
+  (avd-second-brain decision 0014)
+- When code changes, record what was learned in `docs/knowledge/` or
+  [avd-second-brain's KB](https://github.com/avd-ops/avd-second-brain/tree/main/docs/knowledge)
+  (`KB: <link>` in the PR body), or carry the `no-kb` label and a `No KB entry: <reason>` line.
+  The Stop hook and the `kb-capture` check ask for it (avd-second-brain decision 0013, settings
+  in `.claude/kb-capture.toml`).
