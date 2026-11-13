@@ -42,7 +42,7 @@ source "azure-arm" "avd" {
     image_name           = var.gallery.image_definition
     image_version        = local.image_version
     replication_regions  = var.gallery.replica_regions
-    storage_account_type = "Standard_ZRS"
+    storage_account_type = var.gallery.storage_account_type
   }
 
   azure_tags = merge(var.tags, {
@@ -60,7 +60,7 @@ build {
     script = "${path.root}/scripts/01-base.ps1"
     env = {
       TIMEZONE           = var.timezone
-      DISCONNECTED_HOURS = tostring(var.disconnected_session_hours)
+      DISCONNECTED_HOURS = "${var.disconnected_session_hours}"
       GPU_PRESET         = var.gpu_preset ? "True" : "False"
     }
   }
@@ -86,24 +86,23 @@ build {
   # WDOT: fetched on the build host at a pinned commit, uploaded, then applied with the HCL
   # profile from wdot.pkr.hcl. With wdot_profile = "none" the fetch writes an empty placeholder.
   provisioner "shell-local" {
-    environment_vars = [
-      "WDOT_ENABLED=${local.wdot_enabled}",
-      "WDOT_REPOSITORY=${var.wdot_source.repository}",
-      "WDOT_COMMIT=${var.wdot_source.commit}",
-      "WDOT_ZIP=${local.wdot_zip}",
-    ]
+    tempfile_extension = ".sh"
+    execute_command    = ["bash", "-e", "{{.Script}}"]
     inline = [
-      "set -eu",
+      "WDOT_ENABLED='${local.wdot_enabled}'",
+      "WDOT_REPOSITORY='${var.wdot_source.repository}'",
+      "WDOT_COMMIT='${var.wdot_source.commit}'",
+      "WDOT_ZIP='${local.wdot_zip}'",
       "mkdir -p \"$(dirname \"$WDOT_ZIP\")\"",
       "if [ \"$WDOT_ENABLED\" != true ]; then : > \"$WDOT_ZIP\"; exit 0; fi",
       "if [ -s \"$WDOT_ZIP\" ]; then exit 0; fi",
       "tmp=$(mktemp -d)",
+      "trap 'rm -rf \"$tmp\" \"$WDOT_ZIP.part\"' EXIT",
       "git -C \"$tmp\" init -q",
       "git -C \"$tmp\" fetch -q --depth 1 \"$WDOT_REPOSITORY\" \"$WDOT_COMMIT\"",
       "test \"$(git -C \"$tmp\" rev-parse FETCH_HEAD)\" = \"$WDOT_COMMIT\"",
       "git -C \"$tmp\" archive --format=zip --prefix=wdot/ -o \"$WDOT_ZIP.part\" FETCH_HEAD",
       "mv \"$WDOT_ZIP.part\" \"$WDOT_ZIP\"",
-      "rm -rf \"$tmp\"",
     ]
   }
 

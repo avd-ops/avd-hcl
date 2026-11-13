@@ -22,7 +22,7 @@ run "trusted_launch_gallery" {
   command = plan
 
   assert {
-    condition     = azurerm_shared_image.this["win11-24h2-avd-m365"].hyper_v_generation == "V2" && azurerm_shared_image.this["win11-24h2-avd-m365"].trusted_launch_supported
+    condition     = azurerm_shared_image.this["win11-24h2-avd-m365"].hyper_v_generation == "V2" && azurerm_shared_image.this["win11-24h2-avd-m365"].trusted_launch_enabled
     error_message = "Image definitions must be Gen2 and Trusted Launch."
   }
 

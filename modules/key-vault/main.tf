@@ -48,10 +48,10 @@ resource "azurerm_private_endpoint" "vault" {
   }
 }
 
-resource "azapi_resource" "local_admin_username" {
-  type      = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
-  name      = "sessionhost-localadmin-username"
-  parent_id = azurerm_key_vault.this.id
+resource "azapi_resource_action" "local_admin_username" {
+  type        = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
+  resource_id = "${azurerm_key_vault.this.id}/secrets/sessionhost-localadmin-username"
+  method      = "PUT"
   body = {
     properties = {
       value = var.local_admin_username

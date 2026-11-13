@@ -265,6 +265,21 @@ class ReadinessTest(unittest.TestCase):
         with self.assertRaises(runner.UsageError):
             runner.parse_ids("avd.nope")
 
+    def test_az_command_resolves_windows_cmd(self):
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from readiness import context
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "bin").mkdir()
+            az_cmd = root / "bin" / "az.cmd"
+            az_cmd.write_text("@echo off\n")
+            py_exe = root / "python.exe"
+            py_exe.write_text("")
+            with mock.patch("readiness.context.shutil.which", return_value=str(az_cmd)):
+                self.assertEqual(context._az_command(), [str(py_exe.resolve()), "-IBm", "azure.cli"])
+
 
 if __name__ == "__main__":
     unittest.main()

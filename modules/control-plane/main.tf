@@ -27,7 +27,8 @@ resource "azurerm_virtual_desktop_host_pool" "this" {
 
   scheduled_agent_updates {
     enabled                   = true
-    use_session_host_timezone = true
+    timezone                  = var.time_zone
+    use_session_host_timezone = false
     schedule {
       day_of_week = "Saturday"
       hour_of_day = 2

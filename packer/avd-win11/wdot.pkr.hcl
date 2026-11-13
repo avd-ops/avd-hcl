@@ -46,7 +46,7 @@ locals {
 
   wdot_profile = local.wdot_profiles[var.wdot_profile]
   wdot_enabled = var.wdot_profile != "none"
-  wdot_zip     = "${path.root}/packer_cache/wdot-${var.wdot_source.commit}.zip"
+  wdot_zip     = replace("${abspath(path.root)}/packer_cache/wdot-${var.wdot_source.commit}.zip", "\\", "/")
 
   wdot_settings = {
     enabled      = local.wdot_enabled

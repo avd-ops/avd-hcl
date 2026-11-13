@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 ARM = "https://management.azure.com"
@@ -51,10 +52,21 @@ def is_read_only(args: List[str]) -> bool:
     return last in READ_VERBS or last.startswith(READ_PREFIXES)
 
 
+def _az_command() -> List[str]:
+    az_path = shutil.which("az")
+    if not az_path:
+        return ["az"]
+    if az_path.lower().endswith(".cmd"):
+        python_exe = Path(az_path).resolve().parent.parent / "python.exe"
+        if python_exe.exists():
+            return [str(python_exe), "-IBm", "azure.cli"]
+    return [az_path]
+
+
 def run_az(args: List[str]):
     """az with JSON output; None when az is missing, fails or prints something that isn't JSON."""
     try:
-        res = subprocess.run(["az", *args, "-o", "json"], capture_output=True, text=True, check=False)
+        res = subprocess.run([*_az_command(), *args, "-o", "json"], capture_output=True, text=True, check=False)
     except FileNotFoundError:
         return None
     if res.returncode != 0:

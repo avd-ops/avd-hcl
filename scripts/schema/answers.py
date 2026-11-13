@@ -19,6 +19,7 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -34,8 +35,19 @@ class AnswerError(ValueError):
     pass
 
 
+def _az_command():
+    az_path = shutil.which("az")
+    if not az_path:
+        return ["az"]
+    if az_path.lower().endswith(".cmd"):
+        python_exe = Path(az_path).resolve().parent.parent / "python.exe"
+        if python_exe.exists():
+            return [str(python_exe), "-IBm", "azure.cli"]
+    return [az_path]
+
+
 def az(*args):
-    out = subprocess.run(["az", *args, "-o", "tsv"], capture_output=True, text=True)
+    out = subprocess.run([*_az_command(), *args, "-o", "tsv"], capture_output=True, text=True)
     if out.returncode != 0:
         raise AnswerError(f"az {' '.join(args[:3])} failed: {out.stderr.strip().splitlines()[-1] if out.stderr.strip() else out.returncode}")
     return out.stdout.strip()
@@ -89,6 +101,8 @@ def coerce(p, raw):
         raise AnswerError(f"{p['id']}: answer yes or no")
     if t in LIST_TYPES:
         return [s.strip() for s in text.split(",") if s.strip()]
+    if t == "enum" and text == "" and "" in p.get("choices", []):
+        return ""
     return text or None
 
 

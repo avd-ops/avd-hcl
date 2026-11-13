@@ -60,10 +60,11 @@ variable "source_image" {
 
 variable "gallery" {
   type = object({
-    resource_group   = string
-    name             = string
-    image_definition = string
-    replica_regions  = list(string)
+    resource_group       = string
+    name                 = string
+    image_definition     = string
+    replica_regions      = list(string)
+    storage_account_type = optional(string, "Standard_ZRS")
   })
   description = "Compute Gallery destination (from environments/example/02-images)."
 }

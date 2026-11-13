@@ -145,6 +145,24 @@ class AnswersTest(unittest.TestCase):
         self.assertEqual(saved["host_count"], 2)
         self.assertTrue(any("not a whole number" in s for s in said))
 
+    def test_coerce_keeps_empty_enum_choice(self):
+        p_with_empty = {"id": "host_generation", "type": "enum", "choices": ["", "a", "b"]}
+        p_without_empty = {"id": "host_pool_type", "type": "enum", "choices": ["Pooled", "Personal"]}
+        self.assertEqual(answers.coerce(p_with_empty, ""), "")
+        self.assertIsNone(answers.coerce(p_without_empty, ""))
+
+    def test_az_command_resolves_windows_cmd(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "bin").mkdir()
+            az_cmd = root / "bin" / "az.cmd"
+            az_cmd.write_text("@echo off\n")
+            py_exe = root / "python.exe"
+            py_exe.write_text("")
+            with mock.patch("answers.shutil.which", return_value=str(az_cmd)):
+                self.assertEqual(answers._az_command(), [str(py_exe.resolve()), "-IBm", "azure.cli"])
+
 
 if __name__ == "__main__":
     unittest.main()
