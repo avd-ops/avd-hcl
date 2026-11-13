@@ -44,7 +44,7 @@ run "pooled_desktop" {
   }
 
   assert {
-    condition     = !azurerm_virtual_desktop_host_pool.this.scheduled_agent_updates[0].use_session_host_timezone && azurerm_virtual_desktop_host_pool.this.scheduled_agent_updates[0].timezone == "Eastern Standard Time"
+    condition     = !azurerm_virtual_desktop_host_pool.this.scheduled_agent_updates[0].use_session_host_timezone && azurerm_virtual_desktop_host_pool.this.scheduled_agent_updates[0].timezone == var.time_zone
     error_message = "Scheduled agent updates must set an explicit timezone (azurerm #23881)."
   }
 
