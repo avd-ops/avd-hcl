@@ -135,11 +135,11 @@ resource "azapi_resource" "host" {
 # One break-glass secret per host, written through ARM with the password the host was created
 # with. If the write fails after the host is created, reset the host's password in the portal and
 # store it here (avd-landing-zone lesson 0002).
-resource "azapi_resource" "local_admin_password" {
-  for_each  = local.hosts
-  type      = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
-  name      = "${each.key}-localadmin"
-  parent_id = var.key_vault_id
+resource "azapi_resource_action" "local_admin_password" {
+  for_each    = local.hosts
+  type        = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
+  resource_id = "${var.key_vault_id}/secrets/${each.key}-localadmin"
+  method      = "PUT"
   body = {
     properties = {
       contentType = "password for ${var.local_admin_username}"
@@ -164,7 +164,7 @@ resource "azurerm_virtual_machine_extension" "entra_join" {
   type                       = "AADLoginForWindows"
   type_handler_version       = "2.0"
   auto_upgrade_minor_version = true
-  settings                   = jsonencode(var.enroll_in_intune ? { mdmId = local.intune_mdm_id } : {})
+  settings                   = var.enroll_in_intune ? jsonencode({ mdmId = local.intune_mdm_id }) : null
   tags                       = var.tags
 
   lifecycle {

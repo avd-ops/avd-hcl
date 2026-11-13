@@ -60,12 +60,12 @@ run "hosts_spread_over_zones" {
   }
 
   assert {
-    condition     = azapi_resource.local_admin_password["avdtest-002"].name == "avdtest-002-localadmin"
+    condition     = azapi_resource_action.local_admin_password["avdtest-002"].resource_id == "${var.key_vault_id}/secrets/avdtest-002-localadmin" && azapi_resource_action.local_admin_password["avdtest-002"].method == "PUT"
     error_message = "Each host gets its own break-glass secret."
   }
 
   assert {
-    condition     = azurerm_virtual_machine_extension.entra_join["avdtest-001"].settings == "{}"
+    condition     = azurerm_virtual_machine_extension.entra_join["avdtest-001"].settings == null
     error_message = "No Intune enrollment unless asked."
   }
 

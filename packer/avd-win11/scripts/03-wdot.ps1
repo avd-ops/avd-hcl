@@ -50,8 +50,9 @@ function Get-ConfigFile($name) {
 
 function Set-ConfigFile($name, [scriptblock]$change) {
     $file = Get-ConfigFile $name
-    # Every WDOT config file is a JSON array; keep it one even when it holds a single entry.
-    $data = @(ConvertFrom-Json -InputObject (Get-Content -Raw -Path $file.FullName))
+    # Every WDOT config file is a JSON array; keep it one without double-wrapping in PS 5.1.
+    $parsed = ConvertFrom-Json -InputObject (Get-Content -Raw -Path $file.FullName)
+    $data = if ($parsed -is [array]) { $parsed } else { @($parsed) }
     $items = @(Get-Optimization $data)
     & $change $items
     ConvertTo-Json -InputObject $data -Depth 10 | Set-Content -Path $file.FullName -Encoding UTF8

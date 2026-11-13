@@ -18,7 +18,7 @@ resource "azurerm_shared_image" "this" {
   resource_group_name                 = var.resource_group_name
   os_type                             = "Windows"
   hyper_v_generation                  = "V2"
-  trusted_launch_supported            = true
+  trusted_launch_enabled              = true
   accelerated_network_support_enabled = each.value.accelerated_network_support_enabled
   hibernation_enabled                 = each.value.hibernation_enabled
   tags                                = var.tags

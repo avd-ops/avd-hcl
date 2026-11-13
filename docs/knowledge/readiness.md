@@ -89,6 +89,12 @@ A test fails when a check is registered but missing from this table.
   masked, or every link and role name would be.
 - **Signed in as a service principal** (the pipeline), the deployer-rights and hub-rights checks
   come back as "manual": the apply identity holds those roles by design.
+- **Running `az` from Python on Windows:** `subprocess.run(["az", ...])` fails with
+  `FileNotFoundError` because Azure CLI is `az.cmd`, and invoking `.cmd` through `cmd.exe` mangles
+  `=` in `--query` and OData filters. Resolving `az` with `shutil.which("az")` and running the
+  sibling `../python.exe -IBm azure.cli` bypasses `cmd.exe` cleanly.
+- **Empty enum choices in `answers.py`:** `coerce()` must preserve `""` when `""` is explicitly in
+  an enum's `choices` (such as `host_generation`), rather than converting it to `None`.
 
 Verify checks (after the apply: hosts registered and available, a first sign-in) come with the
 first sandbox run, when there is something real to read.

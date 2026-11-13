@@ -118,6 +118,12 @@ resource "azurerm_role_assignment" "avd_power_on_off" {
   principal_type       = "ServicePrincipal"
 }
 
+resource "time_sleep" "avd_power_on_off" {
+  count           = var.grant_avd_power_role ? 1 : 0
+  create_duration = "30s"
+  depends_on      = [azurerm_role_assignment.avd_power_on_off]
+}
+
 module "control_plane" {
   source                     = "../../../modules/control-plane"
   location                   = var.location
@@ -137,7 +143,7 @@ module "control_plane" {
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
 
   # The scaling plan is checked against the service principal's role when it is created.
-  depends_on = [azurerm_role_assignment.avd_power_on_off]
+  depends_on = [time_sleep.avd_power_on_off]
 }
 
 module "session_hosts" {
@@ -187,7 +193,7 @@ module "run_secrets" {
 # it stops the plan before anything is created, instead of failing at the first VM.
 data "azapi_resource" "encryption_at_host_feature" {
   count                  = var.encryption_at_host ? 1 : 0
-  type                   = "Microsoft.Features/providers/features@2021-07-01"
+  type                   = "Microsoft.Compute/features@2021-07-01"
   resource_id            = "${data.azurerm_subscription.current.id}/providers/Microsoft.Features/providers/Microsoft.Compute/features/EncryptionAtHost"
   response_export_values = ["properties.state"]
 }

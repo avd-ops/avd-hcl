@@ -37,7 +37,7 @@ run "private_rbac_vault" {
   }
 
   assert {
-    condition     = azapi_resource.local_admin_username.type == "Microsoft.KeyVault/vaults/secrets@2023-07-01"
+    condition     = azapi_resource_action.local_admin_username.type == "Microsoft.KeyVault/vaults/secrets@2023-07-01" && azapi_resource_action.local_admin_username.method == "PUT"
     error_message = "Secrets go through ARM, so a runner outside the VNet can write them."
   }
 }

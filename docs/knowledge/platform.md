@@ -75,7 +75,9 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
     once.
 - **A Key Vault with public access off can't be written through its data plane** from a runner
   outside the VNet. `azurerm_key_vault_secret` uses the data plane, so secrets go through ARM
-  (`Microsoft.KeyVault/vaults/secrets`) with azapi.
+  (`Microsoft.KeyVault/vaults/secrets`) with azapi. Because ARM rejects `DELETE` on Key Vault
+  secrets (`HTTP 405 DeleteNotSupported`), secrets use `azapi_resource_action` (`method = "PUT"`)
+  instead of `azapi_resource`, letting the vault deletion clean them up.
 - **Run commands through ARM fail the apply when their script fails**, with `asyncExecution =
   false` and `treatFailureAsDeploymentFailure = true`, the same as the landing zone's Bicep.
   azurerm's run command resource has no such setting.
@@ -89,10 +91,12 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   applies. They name the flows; locking egress down is the hub firewall's job or later hardening.
 - **Power On Off Contributor is one assignment per subscription.** A second environment in the
   same subscription sets `grant_avd_power_role = false`, or the apply fails on the existing
-  assignment and a destroy would remove it from every host pool.
+  assignment and a destroy would remove it from every host pool. Even with `depends_on`, ARM needs
+  a short `time_sleep` (30s) after the role assignment before creating the scaling plan.
 - **Encryption at host needs a subscription feature.** The root reads
-  `Microsoft.Compute/EncryptionAtHost` at plan time and stops before creating anything when it
-  isn't registered, with the commands to fix it.
+  `Microsoft.Compute/EncryptionAtHost` at plan time (`type = "Microsoft.Compute/features@2021-07-01"`
+  for azapi v2.13+) and stops before creating anything when it isn't registered, with the commands
+  to fix it.
 - **Mock providers can't hold ephemeral resources** ("No ephemeral resource types in mock
   providers"), even with `override_module`. The ephemeral reads use their own provider alias
   (`azapi.secrets`), which the root test configures as a real provider with placeholder settings
@@ -107,3 +111,27 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   `mock_resource` defaults for IDs that other resources validate), not on computed attributes.
 - **azurerm validates resource ID shapes at plan**, so test inputs need full, well-formed
   placeholder IDs, not short strings.
+
+## Real-run lessons (sandbox)
+
+- **Host pool `scheduled_agent_updates`:** set `timezone = var.time_zone` and
+  `use_session_host_timezone = false` (`azurerm` `#23881` omits `UseSessionHostLocalTime` on
+  create when `use_session_host_timezone = true`).
+- **`AADLoginForWindows` v2.0:** pass `settings = null` (not `"{}"`) when `enroll_in_intune =
+  false`, otherwise the extension fails with `'mdmId' setting was not found`.
+- **Compute Gallery Trusted Launch:** `azurerm_shared_image` must set `trusted_launch_enabled =
+  true` (not `trusted_launch_supported`) to match Packer's `TrustedLaunch` build VM, and
+  `gallery.storage_account_type` must be configurable (e.g., `Standard_LRS` in regions without
+  `Standard_ZRS`).
+- **Packer HCL2 and `shell-local` on Windows:** Packer HCL2 has no `tostring()` (use
+  `"${var.disconnected_session_hours}"`). `shell-local` on Windows hosts needs
+  `tempfile_extension = ".sh"`, `execute_command = ["bash", "-e", "{{.Script}}"]`, and
+  forward-slash `wdot_zip` paths.
+- **WDOT JSON in Windows PowerShell 5.1:** `@(ConvertFrom-Json ...)` double-wraps JSON arrays;
+  check `-is [array]` before wrapping.
+- **Sysprep on Win11 24H2 TrustedLaunch:** Marketplace TrustedLaunch images enable BitLocker
+  Device Encryption by default, failing `Sysprep /generalize` with `0x80310039` unless decrypted
+  first (`Disable-BitLocker` until `FullyDecrypted`). Drop `/mode:vm` (incompatible with `/quiet`),
+  remove both `Panther\unattend.xml` and `Sysprep\unattend.xml`, and only fail if `Sysprep.exe`
+  exits without `ImageState` reaching `IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE`
+  (`IMAGE_STATE_UNDEPLOYABLE` is a normal intermediate state while Sysprep runs).
