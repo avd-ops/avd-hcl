@@ -2,18 +2,18 @@
 # Terraform port of avd-networking (decision 0014), emitting C31 (avd-networking-outputs/v1).
 
 locals {
-  fw_sku_tier     = coalesce(var.firewall_sku_tier, var.profile == "lab" ? "Basic" : "Standard")
-  is_basic_fw     = local.fw_sku_tier == "Basic"
-  fw_pip_count    = local.is_basic_fw ? 1 : coalesce(var.firewall_public_ip_count, var.profile == "lab" ? 1 : 2)
-  use_resolver    = coalesce(var.deploy_private_resolver, var.profile == "enterprise")
-  use_bastion     = coalesce(var.deploy_bastion, var.profile == "enterprise")
-  zones           = length(var.availability_zones) > 0 ? var.availability_zones : null
-  hub_vnet_name   = "vnet-${var.prefix}-${var.environment}"
-  fw_name         = "afw-${var.prefix}-${var.environment}"
-  fw_policy_name  = "afwp-${var.prefix}-${var.environment}"
-  bastion_name    = "bas-${var.prefix}-${var.environment}"
-  gateway_name    = "vgw-${var.prefix}-${var.environment}"
-  resolver_name   = "dnspr-${var.prefix}-${var.environment}"
+  fw_sku_tier    = coalesce(var.firewall_sku_tier, var.profile == "lab" ? "Basic" : "Standard")
+  is_basic_fw    = local.fw_sku_tier == "Basic"
+  fw_pip_count   = local.is_basic_fw ? 1 : coalesce(var.firewall_public_ip_count, var.profile == "lab" ? 1 : 2)
+  use_resolver   = coalesce(var.deploy_private_resolver, var.profile == "enterprise")
+  use_bastion    = coalesce(var.deploy_bastion, var.profile == "enterprise")
+  zones          = length(var.availability_zones) > 0 ? var.availability_zones : null
+  hub_vnet_name  = "vnet-${var.prefix}-${var.environment}"
+  fw_name        = "afw-${var.prefix}-${var.environment}"
+  fw_policy_name = "afwp-${var.prefix}-${var.environment}"
+  bastion_name   = "bas-${var.prefix}-${var.environment}"
+  gateway_name   = "vgw-${var.prefix}-${var.environment}"
+  resolver_name  = "dnspr-${var.prefix}-${var.environment}"
 
   private_dns_zones = var.cloud == "usgov" ? {
     file      = "privatelink.file.core.usgovcloudapi.net"
