@@ -49,6 +49,14 @@ module "foundation" {
   resource_groups = local.names.resource_groups
 }
 
+locals {
+  c31_networking               = var.networking_outputs_file != null ? jsondecode(file(var.networking_outputs_file)) : null
+  effective_hub_vnet_id        = var.hub_vnet_id != null ? var.hub_vnet_id : try(local.c31_networking.hubVnetResourceId, null)
+  effective_egress_firewall_ip = var.egress_firewall_ip != null ? var.egress_firewall_ip : (try(local.c31_networking.hubFirewallPrivateIp, "") != "" ? local.c31_networking.hubFirewallPrivateIp : null)
+  effective_dns_servers        = length(var.dns_servers) > 0 ? var.dns_servers : try(local.c31_networking.dnsServers, [])
+  effective_create_nat_gateway = local.effective_hub_vnet_id != null && local.effective_egress_firewall_ip != null ? false : var.create_nat_gateway
+}
+
 module "network" {
   source              = "../../../modules/network"
   prefix              = var.prefix
@@ -57,11 +65,11 @@ module "network" {
   tags                = local.tags
   address_space       = var.address_space
   subnets             = var.subnets
-  dns_servers         = var.dns_servers
+  dns_servers         = local.effective_dns_servers
   availability_zones  = var.availability_zones
-  hub_vnet_id         = var.hub_vnet_id
-  create_nat_gateway  = var.create_nat_gateway
-  egress_firewall_ip  = var.egress_firewall_ip
+  hub_vnet_id         = local.effective_hub_vnet_id
+  create_nat_gateway  = local.effective_create_nat_gateway
+  egress_firewall_ip  = local.effective_egress_firewall_ip
 }
 
 module "monitoring" {
