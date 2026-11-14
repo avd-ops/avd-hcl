@@ -89,6 +89,12 @@ variable "egress_firewall_ip" {
   default     = null
 }
 
+variable "networking_outputs_file" {
+  description = "Optional path to a C31 networking-outputs.json file from avd-networking or 03-hub-network."
+  type        = string
+  default     = null
+}
+
 variable "grant_avd_power_role" {
   description = "Grant the AVD service principal Power On Off Contributor on the subscription. Only one environment (or the landing zone) per subscription should; set false in the others."
   type        = bool
