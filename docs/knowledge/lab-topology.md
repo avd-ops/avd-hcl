@@ -1,0 +1,22 @@
+---
+title: "Lab topology bootstrap"
+summary: "Terraform module and root for the 4-subscription ALZ lab topology, MCA vending, and per-subscription budgets"
+topic: platform
+status: plan
+last_reviewed: 2026-11-15
+---
+
+# Lab topology bootstrap
+
+`modules/lab-topology` and `environments/example/00-lab-topology` implement the primary 4-subscription ALZ hub-and-spoke topology defined in [avd-ops decision 0019](https://github.com/avd-ops/avd-ops/blob/main/docs/knowledge/decisions/0019-multi-subscription-multi-tenant-lab-topology.md).
+
+## What it manages
+
+- **Management Group hierarchy:** `platform` (`connectivity`, `management`), `landing-zones`, `sandbox`, and `decommissioned`.
+- **Subscription placement or MCA vending:** Set `vend_subscriptions = true` with an MCA `billing_scope_id` to vend `platform-connectivity`, `platform-management`, `lz-avd-workload`, and `sandbox-ci` via `azurerm_subscription`, or leave `vend_subscriptions = false` and pass `existing_subscription_ids` (e.g., for MOSA or pre-created subscriptions).
+- **Spend guardrails:** Attaches a monthly `azurerm_consumption_budget_subscription` (50% Actual, 80% Actual, 100% Forecasted) to every active subscription.
+- **CI isolation:** Optional `ci_principal_id` grants `Contributor` scoped to the `sandbox` Management Group for `sandbox-ci` OIDC runners.
+
+## Manual prerequisites
+
+See [multi-tenant-lab-bootstrap](https://github.com/avd-ops/avd-ops/blob/main/docs/knowledge/getting-started/multi-tenant-lab-bootstrap.md) for the one-time Portal steps (secondary Entra tenant CAPTCHA, Tenant Root Group elevation toggle, and MCA subscription cap ticket).
