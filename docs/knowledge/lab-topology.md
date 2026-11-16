@@ -16,6 +16,8 @@ last_reviewed: 2026-11-15
 - **Subscription placement or MCA vending:** Set `vend_subscriptions = true` with an MCA `billing_scope_id` to vend `platform-connectivity`, `platform-management`, `lz-avd-workload`, and `sandbox-ci` via `azurerm_subscription`, or leave `vend_subscriptions = false` and pass `existing_subscription_ids` (e.g., for MOSA or pre-created subscriptions).
 - **Spend guardrails:** Attaches a monthly `azurerm_consumption_budget_subscription` (50% Actual, 80% Actual, 100% Forecasted) to every active subscription.
 - **CI isolation:** Optional `ci_principal_id` grants `Contributor` scoped to the `sandbox` Management Group for `sandbox-ci` OIDC runners.
+- **Subscription baseline (`modules/subscription-baseline`):** Registers the required Azure Resource Providers (`Microsoft.DesktopVirtualization`, `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.OperationalInsights`, `Microsoft.ManagedServices`, `Microsoft.Quota`) on each target subscription.
+- **T2T Azure Lighthouse (`modules/t2t-lighthouse` and `environments/example/00-t2t-lighthouse`):** Registers providers on the secondary tenant's `t2t-lab` subscription and creates the `azurerm_lighthouse_definition` and `azurerm_lighthouse_assignment` delegating access to the primary lab tenant.
 
 ## Manual prerequisites
 
