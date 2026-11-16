@@ -184,7 +184,7 @@ run "ad_ds_domain_join_uses_key_vault_extension" {
     identity_model                  = "ad_ds"
     domain_name                     = "corp.contoso.com"
     domain_ou_path                  = "OU=AVD,DC=corp,DC=contoso,DC=com"
-    domain_join_username            = "avdjoin@corp.contoso.com"
+    domain_join_username            = "avdjoin@contoso.com"
     domain_join_password_secret_url = "https://kv-test.vault.azure.net/secrets/domain-join-password/00000000000000000000000000000001"
   }
 
@@ -194,7 +194,7 @@ run "ad_ds_domain_join_uses_key_vault_extension" {
   }
 
   assert {
-    condition     = jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).Name == "corp.contoso.com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).OUPath == "OU=AVD,DC=corp,DC=contoso,DC=com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).User == "avdjoin@corp.contoso.com"
+    condition     = jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).Name == "corp.contoso.com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).OUPath == "OU=AVD,DC=corp,DC=contoso,DC=com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).User == "avdjoin@contoso.com"
     error_message = "Domain name, OU path and username are passed to JsonADDomainExtension."
   }
 
