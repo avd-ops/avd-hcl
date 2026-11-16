@@ -72,7 +72,7 @@ if ($env:INSTALL_VCREDIST -eq 'True') {
     Import-Module VcRedist -ErrorAction Stop
     $vcDir = "$env:TEMP\vcredist"
     New-Item -Path $vcDir -ItemType Directory -Force | Out-Null
-    $vcList = Get-VcList -Release 2022 -Architecture x64
+    $vcList = Get-VcList -Release 14 -Architecture x64
     Save-VcRedist -VcList $vcList -Path $vcDir | Out-Null
     Install-VcRedist -VcList $vcList -Path $vcDir -Silent
 }
