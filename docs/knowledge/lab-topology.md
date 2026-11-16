@@ -13,7 +13,7 @@ last_reviewed: 2026-11-15
 ## What it manages
 
 - **Management Group hierarchy:** `platform` (`connectivity`, `management`), `landing-zones`, `sandbox`, and `decommissioned`.
-- **Subscription placement or MCA vending:** Set `vend_subscriptions = true` with an MCA `billing_scope_id` to vend `platform-connectivity`, `platform-management`, `lz-avd-workload`, and `sandbox-ci` via `azurerm_subscription`, or leave `vend_subscriptions = false` and pass `existing_subscription_ids` (e.g., for MOSA or pre-created subscriptions).
+- **Subscription placement or MCA vending:** Set `vend_subscriptions = true` with an MCA `billing_scope_id` to vend `platform-connectivity`, `platform-management`, `lz-avd-workload` (plus optional `lz-avd-workload-2` via `enable_second_workload_spoke = true`), and `sandbox-ci` via `azurerm_subscription`. Any subscription already listed in `existing_subscription_ids` is reused in place and only missing subscriptions are vended.
 - **Spend guardrails:** Attaches a monthly `azurerm_consumption_budget_subscription` (50% Actual, 80% Actual, 100% Forecasted) to every active subscription.
 - **CI isolation:** Optional `ci_principal_id` grants `Contributor` scoped to the `sandbox` Management Group for `sandbox-ci` OIDC runners.
 - **Subscription baseline (`modules/subscription-baseline`):** Registers the required Azure Resource Providers (`Microsoft.DesktopVirtualization`, `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.OperationalInsights`, `Microsoft.ManagedServices`, `Microsoft.Quota`) on each target subscription.

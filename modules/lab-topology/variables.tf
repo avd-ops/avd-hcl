@@ -17,7 +17,13 @@ variable "root_management_group_id" {
 
 variable "vend_subscriptions" {
   type        = bool
-  description = "When true, vend the four primary lab subscriptions via MCA billing_scope_id; when false, associate existing_subscription_ids."
+  description = "When true, vend any primary lab subscriptions not already listed in existing_subscription_ids via MCA billing_scope_id."
+  default     = false
+}
+
+variable "enable_second_workload_spoke" {
+  type        = bool
+  description = "When true, include a second AVD workload spoke subscription (lz-avd-workload-2) under landing-zones."
   default     = false
 }
 
@@ -34,15 +40,15 @@ variable "billing_scope_id" {
 
 variable "existing_subscription_ids" {
   type        = map(string)
-  description = "Map of subscription role key (platform-connectivity, platform-management, lz-avd-workload, sandbox-ci) to existing subscription UUID when vend_subscriptions is false."
+  description = "Map of subscription role key (platform-connectivity, platform-management, lz-avd-workload, lz-avd-workload-2, sandbox-ci) to existing subscription UUID."
   default     = {}
 
   validation {
     condition = alltrue([
       for k in keys(var.existing_subscription_ids) :
-      contains(["platform-connectivity", "platform-management", "lz-avd-workload", "sandbox-ci"], k)
+      contains(["platform-connectivity", "platform-management", "lz-avd-workload", "lz-avd-workload-2", "sandbox-ci"], k)
     ])
-    error_message = "existing_subscription_ids keys must be among platform-connectivity, platform-management, lz-avd-workload, sandbox-ci."
+    error_message = "existing_subscription_ids keys must be among platform-connectivity, platform-management, lz-avd-workload, lz-avd-workload-2, sandbox-ci."
   }
 }
 

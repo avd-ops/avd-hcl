@@ -1,5 +1,5 @@
 locals {
-  subscription_specs = {
+  base_subscription_specs = {
     "platform-connectivity" = {
       mg_key   = "platform-connectivity"
       workload = "Production"
@@ -18,9 +18,23 @@ locals {
     }
   }
 
-  active_subscription_ids = var.vend_subscriptions ? {
-    for k, sub in azurerm_subscription.vended : k => sub.subscription_id
-  } : var.existing_subscription_ids
+  second_workload_spec = var.enable_second_workload_spoke || contains(keys(var.existing_subscription_ids), "lz-avd-workload-2") ? {
+    "lz-avd-workload-2" = {
+      mg_key   = "landing-zones"
+      workload = "DevTest"
+    }
+  } : {}
+
+  subscription_specs = merge(local.base_subscription_specs, local.second_workload_spec)
+
+  subscriptions_to_vend = var.vend_subscriptions ? {
+    for k, v in local.subscription_specs : k => v if !contains(keys(var.existing_subscription_ids), k)
+  } : {}
+
+  active_subscription_ids = merge(
+    var.existing_subscription_ids,
+    { for k, sub in azurerm_subscription.vended : k => sub.subscription_id }
+  )
 }
 
 resource "azurerm_management_group" "platform" {
@@ -71,7 +85,7 @@ locals {
 }
 
 resource "azurerm_subscription" "vended" {
-  for_each = var.vend_subscriptions ? local.subscription_specs : {}
+  for_each = local.subscriptions_to_vend
 
   subscription_name = "${var.prefix}-${each.key}"
   alias             = "${var.prefix}-${each.key}"
