@@ -2,14 +2,14 @@
 
 Part of [avd-ops](https://avd-ops.dev/), the open toolkit for Azure Virtual Desktop.
 
-> **Personal project, not for production.** Provided as is, with no warranty. Not affiliated with
+> **Community research project. Use at your own risk. No warranty.** Provided as is, with no warranty. Not affiliated with
 > or endorsed by the author's employer, Microsoft, HashiCorp or Nerdio.
 
 Native Azure Virtual Desktop, deployed and operated with the HashiCorp stack: Terraform for the
 estate, Packer for golden images, Azure Key Vault and managed identities for secrets (no Vault
 server, decision 0004), and Ansible only if it turns out to earn its place. No vendor management plane sits in the path.
 
-**Status: phases 1–3, built and tested offline only.** The platform stage builds pooled or
+**Status: phases 1â€“3, built and tested offline only.** The platform stage builds pooled or
 personal Entra-joined host pools with FSLogix, autoscale (or Start VM on Connect), blue/green
 host rotation, optional daily auto-shutdown, optional monthly budgets and AVD Insights; the
 images stage and Packer template build the Compute Gallery and golden image with WDOT; nothing
