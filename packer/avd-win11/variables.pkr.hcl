@@ -18,7 +18,7 @@ variable "cloud" {
 
   validation {
     condition     = contains(["commercial", "usgov"], var.cloud)
-    error_message = "cloud must be commercial or usgov."
+    error_message = "Cloud must be commercial or usgov."
   }
 }
 
