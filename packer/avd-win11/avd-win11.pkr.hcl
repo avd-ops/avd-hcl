@@ -1,5 +1,5 @@
 # Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), packer/avd-win11/avd-win11.pkr.hcl; see CREDITS.md and NOTICE.
-# Changes: passes DISCONNECTED_HOURS to 01-base.ps1; no Ansible or Evergreen steps.
+# Changes: passes DISCONNECTED_HOURS, INSTALL_EVERGREEN, and INSTALL_VCREDIST to 01-base.ps1; no Ansible steps.
 
 locals {
   image_version = var.image_version != "" ? var.image_version : formatdate("YYYY.MMDD.hhmm", timestamp())
@@ -63,6 +63,8 @@ build {
       TIMEZONE           = var.timezone
       DISCONNECTED_HOURS = "${var.disconnected_session_hours}"
       GPU_PRESET         = var.gpu_preset ? "True" : "False"
+      INSTALL_EVERGREEN  = var.install_evergreen ? "True" : "False"
+      INSTALL_VCREDIST   = var.install_vcredist ? "True" : "False"
     }
   }
 

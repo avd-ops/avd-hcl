@@ -1,5 +1,5 @@
 # Adapted from nerdio-hcl (Apache-2.0, commit 75f59bc), packer/avd-win11/variables.pkr.hcl; see CREDITS.md and NOTICE.
-# Changes: default image definition is win11-24h2-avd-m365; no Ansible or Evergreen steps.
+# Changes: default image definition is win11-24h2-avd-m365; adds install_evergreen and install_vcredist; no Ansible steps.
 
 variable "subscription_id" {
   type        = string
@@ -154,6 +154,18 @@ variable "gpu_preset" {
   type        = bool
   default     = false
   description = "Enable GPU hardware-accelerated frame encoding (AVC/HEVC) policies for GPU session hosts."
+}
+
+variable "install_evergreen" {
+  type        = bool
+  default     = false
+  description = "Install the MIT-licensed EUCPilots Evergreen PowerShell module on the golden image."
+}
+
+variable "install_vcredist" {
+  type        = bool
+  default     = false
+  description = "Install Microsoft Visual C++ 2022 x64 Redistributables via EUCPilots VcRedist."
 }
 
 variable "tags" {
