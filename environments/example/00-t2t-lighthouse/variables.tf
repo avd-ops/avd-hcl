@@ -19,6 +19,17 @@ variable "name" {
   default     = "avd-ops-t2t-lab"
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "authorizations" {
   type = list(object({
     principal_id                  = string

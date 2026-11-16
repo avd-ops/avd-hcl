@@ -11,6 +11,17 @@ variable "tenant_id" {
   description = "Entra tenant for the build."
 }
 
+variable "cloud" {
+  type        = string
+  default     = "commercial"
+  description = "Target cloud environment profile (commercial or usgov)."
+
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "use_azure_cli_auth" {
   type        = bool
   default     = true

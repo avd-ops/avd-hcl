@@ -14,6 +14,17 @@ variable "prefix" {
   default     = "avdlz"
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "root_management_group_id" {
   type        = string
   description = "Optional parent Management Group ID (defaults to Tenant Root Group when null)."

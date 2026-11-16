@@ -27,6 +27,17 @@ variable "environment" {
   default     = "sandbox"
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "github" {
   description = "Repository the pipeline runs from, and the GitHub logins allowed to approve an apply. enterprise only on GitHub Enterprise."
   type = object({

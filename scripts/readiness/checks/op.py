@@ -36,6 +36,8 @@ def azure_cloud(ctx, c):
     ctx.cloud = data
     if data == "AzureCloud":
         return c.ok("AzureCloud (commercial)")
+    if data == "AzureUSGovernment":
+        return c.ok("AzureUSGovernment (US Government)")
     ctx.stopped = f"{data} isn't a cloud this kit supports yet"
     return c.fail(f"{data} isn't a cloud this kit supports yet", "az cloud set --name AzureCloud")
 

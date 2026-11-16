@@ -9,12 +9,16 @@ locals {
   vnet_name            = local.use_existing_network ? element(split("/", var.existing_vnet_id), length(split("/", var.existing_vnet_id)) - 1) : azurerm_virtual_network.avd[0].name
 
   private_dns_zones = merge(
-    {
+    var.cloud == "usgov" ? {
+      file  = "privatelink.file.core.usgovcloudapi.net"
+      vault = "privatelink.vaultcore.usgovcloudapi.net"
+      blob  = "privatelink.blob.core.usgovcloudapi.net"
+      } : {
       file  = "privatelink.file.core.windows.net"
       vault = "privatelink.vaultcore.azure.net"
       blob  = "privatelink.blob.core.windows.net"
     },
-    var.enable_avd_private_link ? { avd = "privatelink.wvd.microsoft.com" } : {},
+    var.enable_avd_private_link ? { avd = var.cloud == "usgov" ? "privatelink.wvd.azure.us" : "privatelink.wvd.microsoft.com" } : {},
   )
 }
 

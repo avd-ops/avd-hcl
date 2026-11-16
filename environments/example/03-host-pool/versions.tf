@@ -24,6 +24,7 @@ terraform {
 provider "azurerm" {
   subscription_id                 = var.subscription_id
   tenant_id                       = var.tenant_id
+  environment                     = var.cloud == "usgov" ? "usgovernment" : "public"
   storage_use_azuread             = true
   resource_provider_registrations = "none"
   features {}
@@ -32,6 +33,7 @@ provider "azurerm" {
 provider "azapi" {
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
+  environment     = var.cloud == "usgov" ? "usgovernment" : "public"
 }
 
 # Used only for ephemeral reads in modules/run-secrets.
@@ -39,4 +41,5 @@ provider "azapi" {
   alias           = "secrets"
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
+  environment     = var.cloud == "usgov" ? "usgovernment" : "public"
 }

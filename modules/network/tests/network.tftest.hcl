@@ -156,3 +156,18 @@ run "avd_private_link_adds_wvd_dns_zone" {
     error_message = "Enabling AVD Private Link adds the privatelink.wvd.microsoft.com DNS zone."
   }
 }
+
+run "usgov_uses_gov_private_dns_zones" {
+  command = plan
+
+  variables {
+    cloud                   = "usgov"
+    location                = "usgovvirginia"
+    enable_avd_private_link = true
+  }
+
+  assert {
+    condition     = azurerm_private_dns_zone.this["file"].name == "privatelink.file.core.usgovcloudapi.net" && azurerm_private_dns_zone.this["vault"].name == "privatelink.vaultcore.usgovcloudapi.net" && azurerm_private_dns_zone.this["blob"].name == "privatelink.blob.core.usgovcloudapi.net" && azurerm_private_dns_zone.this["avd"].name == "privatelink.wvd.azure.us"
+    error_message = "usgov cloud must use Azure Government privatelink DNS zones."
+  }
+}

@@ -21,6 +21,16 @@ variable "environment" {
   }
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "location" {
   description = "Azure region for everything."
   type        = string

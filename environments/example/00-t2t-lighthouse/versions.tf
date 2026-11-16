@@ -14,6 +14,7 @@ terraform {
 provider "azurerm" {
   subscription_id                 = var.target_subscription_id
   tenant_id                       = var.target_tenant_id
+  environment                     = var.cloud == "usgov" ? "usgovernment" : "public"
   resource_provider_registrations = "none"
   features {}
 }

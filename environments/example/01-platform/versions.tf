@@ -34,6 +34,7 @@ terraform {
 provider "azurerm" {
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
+  environment     = var.cloud == "usgov" ? "usgovernment" : "public"
   # The profile account has shared key access off, so data-plane calls use Entra ID.
   storage_use_azuread = true
   # Register only the providers AVD and the kit need. The provider does this when it starts and
@@ -71,12 +72,14 @@ provider "azurerm" {
 }
 
 provider "azuread" {
-  tenant_id = var.tenant_id
+  tenant_id   = var.tenant_id
+  environment = var.cloud == "usgov" ? "usgovernment" : "public"
 }
 
 provider "azapi" {
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
+  environment     = var.cloud == "usgov" ? "usgovernment" : "public"
 }
 
 # The same identity, used only for the ephemeral reads in modules/run-secrets.
@@ -84,4 +87,5 @@ provider "azapi" {
   alias           = "secrets"
   subscription_id = var.subscription_id
   tenant_id       = var.tenant_id
+  environment     = var.cloud == "usgov" ? "usgovernment" : "public"
 }

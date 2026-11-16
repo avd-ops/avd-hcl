@@ -302,3 +302,23 @@ run "brownfield_and_ad_ds_wiring" {
     error_message = "Control plane attaches to the existing workspace."
   }
 }
+
+run "usgov_wires_gov_endpoints" {
+  command = plan
+
+  variables {
+    cloud                   = "usgov"
+    location                = "usgovvirginia"
+    enable_avd_private_link = true
+  }
+
+  assert {
+    condition     = endswith(output.profile_share_unc, ".file.core.usgovcloudapi.net\\profiles")
+    error_message = "usgov platform root must emit .file.core.usgovcloudapi.net in profile_share_unc."
+  }
+
+  assert {
+    condition     = module.network.private_dns_zone_ids != null
+    error_message = "usgov network module must plan private DNS zones."
+  }
+}

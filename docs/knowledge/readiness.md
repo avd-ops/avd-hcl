@@ -35,7 +35,7 @@ failed, exit 1), **INCOMPLETE** (every identity or subscription check came back 
 
 | ID | Check | Right needed | Reads with |
 |---|---|---|---|
-| `op.cloud` | Azure cloud: AzureCloud only for now | none | `az cloud show` |
+| `op.cloud` | Azure cloud: `AzureCloud` (commercial) or `AzureUSGovernment` (US Gov) | none | `az cloud show` |
 | `op.tools` | Terraform 1.11+, python3 3.9+, az, jq, git | none | PATH |
 | `op.signin` | Signed in to az | none | `az account show` |
 | `id.sub_owner` | Owner, or Contributor plus Role Based Access Control Administrator | Reader | `az role assignment list` |

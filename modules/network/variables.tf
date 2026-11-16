@@ -10,6 +10,17 @@ variable "location" {
   type        = string
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "resource_group_name" {
   description = "Resource group for the AVD virtual network."
   type        = string

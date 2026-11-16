@@ -62,6 +62,7 @@ module "network" {
   source                               = "../../../modules/network"
   prefix                               = var.prefix
   location                             = var.location
+  cloud                                = var.cloud
   resource_group_name                  = module.foundation.resource_group_names["network"]
   tags                                 = local.tags
   address_space                        = var.address_space
@@ -112,6 +113,7 @@ module "fslogix" {
   source                      = "../../../modules/fslogix-storage"
   name                        = local.names.storage_account
   location                    = var.location
+  cloud                       = var.cloud
   resource_group_name         = module.foundation.resource_group_names["storage"]
   tags                        = local.tags
   identity_model              = var.identity_model
