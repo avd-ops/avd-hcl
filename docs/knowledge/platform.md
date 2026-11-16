@@ -135,3 +135,32 @@ Each is a `terraform test` run, so a change that undoes it fails CI.
   remove both `Panther\unattend.xml` and `Sysprep\unattend.xml`, and only fail if `Sysprep.exe`
   exits without `ImageState` reaching `IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE`
   (`IMAGE_STATE_UNDEPLOYABLE` is a normal intermediate state while Sysprep runs).
+
+## Brownfield & Hybrid AD DS
+
+- **Identity model switch (`identity_model`):** `entra_only` (default) joins hosts with
+  `AADLoginForWindows`, sets `targetisaadjoined:i:1;enablerdsaadauth:i:1` in host pool RDP
+  properties, and configures FSLogix storage for `AADKERB`. `ad_ds` joins hosts with
+  `JsonADDomainExtension` (reading the domain-join password via `protected_settings_from_key_vault`
+  so no secret enters state), omits `targetisaadjoined:i:1` from default RDP properties, and
+  configures FSLogix storage for `AD` SMB.
+- **Brownfield `existing_*` inputs:** `foundation` (`existing_resource_group_names`), `network`
+  (`existing_vnet_id`, `existing_session_hosts_subnet_id`, `existing_private_endpoints_subnet_id`),
+  `monitoring` (`existing_log_analytics_workspace_id`), `key-vault` (`existing_key_vault_id`),
+  `fslogix-storage` (`existing_storage_account_id`, `existing_share_name`), and `control-plane`
+  (`existing_workspace_id`) allow reusing existing infrastructure without recreating it.
+- **Adopting an existing host pool / control plane with `import {}`:** To bring an existing host
+  pool, desktop application group, or workspace under Terraform management instead of creating new
+  ones, add `import {}` blocks in a separate `imports.tf` in your environment root:
+
+```hcl
+import {
+  to = module.control_plane.azurerm_virtual_desktop_host_pool.this
+  id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd/providers/Microsoft.DesktopVirtualization/hostPools/vdpool-existing"
+}
+
+import {
+  to = module.control_plane.azurerm_virtual_desktop_application_group.desktop
+  id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd/providers/Microsoft.DesktopVirtualization/applicationGroups/vdag-existing"
+}
+```

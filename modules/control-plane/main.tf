@@ -6,7 +6,12 @@
 # Diagnostics from every object go to Log Analytics (that's what AVD Insights reads).
 
 locals {
-  deploy_scaling_plan = var.scaling_plan_enabled && var.host_pool_type == "Pooled"
+  use_existing_workspace = var.existing_workspace_id != null
+  deploy_scaling_plan    = var.scaling_plan_enabled && var.host_pool_type == "Pooled"
+  base_rdp_properties    = "drivestoredirect:s:;usbdevicestoredirect:s:;redirectcomports:i:0;redirectsmartcards:i:1;redirectprinters:i:1;redirectclipboard:i:1;redirectwebauthn:i:1;audiomode:i:0;audiocapturemode:i:1;camerastoredirect:s:*;use multimon:i:1"
+  effective_rdp_properties = var.rdp_properties != null ? var.rdp_properties : (
+    var.identity_model == "entra_only" ? "enablerdsaadauth:i:1;targetisaadjoined:i:1;${local.base_rdp_properties}" : local.base_rdp_properties
+  )
 }
 
 resource "azurerm_virtual_desktop_host_pool" "this" {
@@ -19,7 +24,7 @@ resource "azurerm_virtual_desktop_host_pool" "this" {
   personal_desktop_assignment_type = var.host_pool_type == "Personal" ? var.personal_assignment_type : null
   preferred_app_group_type         = "Desktop"
   maximum_sessions_allowed         = var.host_pool_type == "Personal" ? null : var.max_sessions_per_host
-  custom_rdp_properties            = var.rdp_properties
+  custom_rdp_properties            = local.effective_rdp_properties
   validate_environment             = var.validation_environment
   start_vm_on_connect              = var.start_vm_on_connect
   public_network_access            = "Enabled"
@@ -71,16 +76,28 @@ resource "azurerm_virtual_desktop_application_group" "desktop" {
 
 # The feed stays public so users can subscribe from any network.
 resource "azurerm_virtual_desktop_workspace" "this" {
+  count                         = local.use_existing_workspace ? 0 : 1
   name                          = var.workspace_name
   friendly_name                 = var.workspace_friendly_name
   location                      = var.location
   resource_group_name           = var.resource_group_name
   public_network_access_enabled = true
   tags                          = var.tags
+
+  lifecycle {
+    precondition {
+      condition     = var.workspace_name != null
+      error_message = "workspace_name is required when existing_workspace_id is null."
+    }
+  }
+}
+
+locals {
+  workspace_id = local.use_existing_workspace ? var.existing_workspace_id : azurerm_virtual_desktop_workspace.this[0].id
 }
 
 resource "azurerm_virtual_desktop_workspace_application_group_association" "desktop" {
-  workspace_id         = azurerm_virtual_desktop_workspace.this.id
+  workspace_id         = local.workspace_id
   application_group_id = azurerm_virtual_desktop_application_group.desktop.id
 }
 
@@ -159,8 +176,8 @@ locals {
     {
       host_pool = azurerm_virtual_desktop_host_pool.this.id
       app_group = azurerm_virtual_desktop_application_group.desktop.id
-      workspace = azurerm_virtual_desktop_workspace.this.id
     },
+    local.use_existing_workspace ? {} : { workspace = azurerm_virtual_desktop_workspace.this[0].id },
     local.deploy_scaling_plan ? { scaling_plan = azurerm_virtual_desktop_scaling_plan.this[0].id } : {},
   )
 }

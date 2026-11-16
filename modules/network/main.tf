@@ -4,6 +4,10 @@
 # availability_zones (avd-landing-zone lesson 0001) instead of always taking zones 1-3.
 
 locals {
+  use_existing_network = var.existing_vnet_id != null
+  vnet_id              = local.use_existing_network ? var.existing_vnet_id : azurerm_virtual_network.avd[0].id
+  vnet_name            = local.use_existing_network ? element(split("/", var.existing_vnet_id), length(split("/", var.existing_vnet_id)) - 1) : azurerm_virtual_network.avd[0].name
+
   private_dns_zones = {
     file  = "privatelink.file.core.windows.net"
     vault = "privatelink.vaultcore.azure.net"
@@ -12,6 +16,7 @@ locals {
 }
 
 resource "azurerm_virtual_network" "avd" {
+  count               = local.use_existing_network ? 0 : 1
   name                = "vnet-${var.prefix}-avd"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -21,17 +26,19 @@ resource "azurerm_virtual_network" "avd" {
 }
 
 resource "azurerm_subnet" "session_hosts" {
+  count                           = local.use_existing_network ? 0 : 1
   name                            = "snet-session-hosts"
   resource_group_name             = var.resource_group_name
-  virtual_network_name            = azurerm_virtual_network.avd.name
+  virtual_network_name            = azurerm_virtual_network.avd[0].name
   address_prefixes                = [var.subnets.session_hosts]
   default_outbound_access_enabled = false
 }
 
 resource "azurerm_subnet" "private_endpoints" {
+  count                             = local.use_existing_network ? 0 : 1
   name                              = "snet-private-endpoints"
   resource_group_name               = var.resource_group_name
-  virtual_network_name              = azurerm_virtual_network.avd.name
+  virtual_network_name              = azurerm_virtual_network.avd[0].name
   address_prefixes                  = [var.subnets.private_endpoints]
   private_endpoint_network_policies = "Enabled"
   default_outbound_access_enabled   = false
@@ -42,6 +49,7 @@ resource "azurerm_subnet" "private_endpoints" {
 # applies. Locking egress down to the AVD required URLs is the hub firewall's job, or comes with
 # hardening in a later phase.
 resource "azurerm_network_security_group" "session_hosts" {
+  count               = local.use_existing_network ? 0 : 1
   name                = "nsg-${var.prefix}-session-hosts"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -85,6 +93,7 @@ resource "azurerm_network_security_group" "session_hosts" {
 }
 
 resource "azurerm_network_security_group" "private_endpoints" {
+  count               = local.use_existing_network ? 0 : 1
   name                = "nsg-${var.prefix}-private-endpoints"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -104,13 +113,15 @@ resource "azurerm_network_security_group" "private_endpoints" {
 }
 
 resource "azurerm_subnet_network_security_group_association" "session_hosts" {
-  subnet_id                 = azurerm_subnet.session_hosts.id
-  network_security_group_id = azurerm_network_security_group.session_hosts.id
+  count                     = local.use_existing_network ? 0 : 1
+  subnet_id                 = azurerm_subnet.session_hosts[0].id
+  network_security_group_id = azurerm_network_security_group.session_hosts[0].id
 }
 
 resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
-  subnet_id                 = azurerm_subnet.private_endpoints.id
-  network_security_group_id = azurerm_network_security_group.private_endpoints.id
+  count                     = local.use_existing_network ? 0 : 1
+  subnet_id                 = azurerm_subnet.private_endpoints[0].id
+  network_security_group_id = azurerm_network_security_group.private_endpoints[0].id
 }
 
 resource "azurerm_private_dns_zone" "this" {
@@ -122,17 +133,17 @@ resource "azurerm_private_dns_zone" "this" {
 
 resource "azurerm_private_dns_zone_virtual_network_link" "this" {
   for_each            = azurerm_private_dns_zone.this
-  name                = "link-${azurerm_virtual_network.avd.name}"
+  name                = "link-${local.vnet_name}"
   private_dns_zone_id = each.value.id
-  virtual_network_id  = azurerm_virtual_network.avd.id
+  virtual_network_id  = local.vnet_id
   tags                = var.tags
 }
 
 resource "azurerm_virtual_network_peering" "to_hub" {
-  count                     = var.hub_vnet_id == null ? 0 : 1
+  count                     = !local.use_existing_network && var.hub_vnet_id != null ? 1 : 0
   name                      = "peer-to-hub"
   resource_group_name       = var.resource_group_name
-  virtual_network_name      = azurerm_virtual_network.avd.name
+  virtual_network_name      = azurerm_virtual_network.avd[0].name
   remote_virtual_network_id = var.hub_vnet_id
   allow_forwarded_traffic   = true
   use_remote_gateways       = var.use_remote_gateways
@@ -143,7 +154,7 @@ resource "azurerm_virtual_network_peering" "to_hub" {
 # The gateway itself stays regional; its IP is zone-redundant only where the region has zones,
 # because a zoned IP fails in a region without them (avd-landing-zone lesson 0001).
 resource "azurerm_public_ip" "nat" {
-  count               = var.create_nat_gateway ? 1 : 0
+  count               = !local.use_existing_network && var.create_nat_gateway ? 1 : 0
   name                = "pip-${var.prefix}-nat"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -154,7 +165,7 @@ resource "azurerm_public_ip" "nat" {
 }
 
 resource "azurerm_nat_gateway" "this" {
-  count               = var.create_nat_gateway ? 1 : 0
+  count               = !local.use_existing_network && var.create_nat_gateway ? 1 : 0
   name                = "ng-${var.prefix}"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -163,21 +174,21 @@ resource "azurerm_nat_gateway" "this" {
 }
 
 resource "azurerm_nat_gateway_public_ip_association" "this" {
-  count                = var.create_nat_gateway ? 1 : 0
+  count                = !local.use_existing_network && var.create_nat_gateway ? 1 : 0
   nat_gateway_id       = azurerm_nat_gateway.this[0].id
   public_ip_address_id = azurerm_public_ip.nat[0].id
 }
 
 resource "azurerm_subnet_nat_gateway_association" "session_hosts" {
-  count          = var.create_nat_gateway ? 1 : 0
-  subnet_id      = azurerm_subnet.session_hosts.id
+  count          = !local.use_existing_network && var.create_nat_gateway ? 1 : 0
+  subnet_id      = azurerm_subnet.session_hosts[0].id
   nat_gateway_id = azurerm_nat_gateway.this[0].id
 }
 
 # Default route to a hub firewall, for when the hub handles egress instead of the NAT gateway.
 # Peering alone doesn't send internet traffic through the hub.
 resource "azurerm_route_table" "session_hosts" {
-  count                         = var.egress_firewall_ip == null ? 0 : 1
+  count                         = !local.use_existing_network && var.egress_firewall_ip != null ? 1 : 0
   name                          = "rt-${var.prefix}-session-hosts"
   location                      = var.location
   resource_group_name           = var.resource_group_name
@@ -193,7 +204,7 @@ resource "azurerm_route_table" "session_hosts" {
 }
 
 resource "azurerm_subnet_route_table_association" "session_hosts" {
-  count          = var.egress_firewall_ip == null ? 0 : 1
-  subnet_id      = azurerm_subnet.session_hosts.id
+  count          = !local.use_existing_network && var.egress_firewall_ip != null ? 1 : 0
+  subnet_id      = azurerm_subnet.session_hosts[0].id
   route_table_id = azurerm_route_table.session_hosts[0].id
 }

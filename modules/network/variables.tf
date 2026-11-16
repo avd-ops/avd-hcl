@@ -84,11 +84,11 @@ variable "existing_private_dns_zone_ids" {
 }
 
 variable "create_nat_gateway" {
-  description = "Give session hosts outbound internet through a NAT gateway. Set false when a hub firewall handles egress, and set egress_firewall_ip."
+  description = "Give session hosts outbound internet through a NAT gateway. Set false when a hub firewall handles egress, and set egress_firewall_ip. Ignored when existing_vnet_id is set."
   type        = bool
   default     = true
   validation {
-    condition     = var.create_nat_gateway != (var.egress_firewall_ip != null)
+    condition     = var.existing_vnet_id != null || var.create_nat_gateway != (var.egress_firewall_ip != null)
     error_message = "Session hosts need exactly one way out: the NAT gateway, or egress_firewall_ip with create_nat_gateway = false."
   }
 }
@@ -101,4 +101,26 @@ variable "egress_firewall_ip" {
     condition     = var.egress_firewall_ip == null || can(cidrhost("${coalesce(var.egress_firewall_ip, "0.0.0.0")}/32", 0))
     error_message = "egress_firewall_ip must be an IPv4 address."
   }
+}
+
+variable "existing_vnet_id" {
+  description = "Existing AVD spoke VNet ID. When set, no VNet, subnets, NSGs, NAT gateway, route table, or hub peering are created; pass existing_session_hosts_subnet_id and existing_private_endpoints_subnet_id."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.existing_vnet_id == null || (var.existing_session_hosts_subnet_id != null && var.existing_private_endpoints_subnet_id != null)
+    error_message = "existing_vnet_id requires both existing_session_hosts_subnet_id and existing_private_endpoints_subnet_id."
+  }
+}
+
+variable "existing_session_hosts_subnet_id" {
+  description = "Existing subnet ID for session hosts when reusing an existing VNet."
+  type        = string
+  default     = null
+}
+
+variable "existing_private_endpoints_subnet_id" {
+  description = "Existing subnet ID for private endpoints when reusing an existing VNet."
+  type        = string
+  default     = null
 }

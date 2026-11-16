@@ -14,6 +14,11 @@ mock_provider "azurerm" {
       tenant_id = "00000000-0000-0000-0000-000000000001"
     }
   }
+  mock_data "azurerm_resource_group" {
+    defaults = {
+      id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-existing"
+    }
+  }
   mock_resource "azurerm_resource_group" {
     defaults = {
       id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-test"
@@ -257,5 +262,43 @@ run "personal_pool_and_budget" {
   assert {
     condition     = output.host_pool_name == "vdpool-avd-test"
     error_message = "Personal pool, generation, auto-shutdown and budget plan cleanly through the platform root."
+  }
+}
+
+run "brownfield_and_ad_ds_wiring" {
+  command = plan
+
+  variables {
+    identity_model = "ad_ds"
+    fslogix_active_directory = {
+      domain_name = "corp.contoso.com"
+      domain_guid = "00000000-0000-0000-0000-000000000010"
+    }
+    existing_resource_group_names = {
+      network = "rg-existing-net"
+    }
+    existing_vnet_id                     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-existing-net/providers/Microsoft.Network/virtualNetworks/vnet-existing"
+    existing_session_hosts_subnet_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-existing-net/providers/Microsoft.Network/virtualNetworks/vnet-existing/subnets/snet-hosts"
+    existing_private_endpoints_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-existing-net/providers/Microsoft.Network/virtualNetworks/vnet-existing/subnets/snet-pe"
+    create_private_dns_zones             = false
+    existing_private_dns_zone_ids = {
+      file  = "/zones/file"
+      vault = "/zones/vault"
+    }
+    existing_log_analytics_workspace_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ops/providers/Microsoft.OperationalInsights/workspaces/log-existing"
+    existing_key_vault_id               = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sec/providers/Microsoft.KeyVault/vaults/kv-existing"
+    existing_storage_account_id         = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-storage/providers/Microsoft.Storage/storageAccounts/stexistingavd"
+    existing_share_name                 = "avdprofiles"
+    existing_workspace_id               = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd/providers/Microsoft.DesktopVirtualization/workspaces/vdws-existing"
+  }
+
+  assert {
+    condition     = output.resource_group_names["network"] == "rg-existing-net" && output.key_vault_name == "kv-existing" && output.profile_storage_account_name == "stexistingavd" && output.profile_share_unc == "\\\\stexistingavd.file.core.windows.net\\avdprofiles"
+    error_message = "Brownfield resource IDs and names flow through the platform root."
+  }
+
+  assert {
+    condition     = module.control_plane.workspace_id == var.existing_workspace_id
+    error_message = "Control plane attaches to the existing workspace."
   }
 }

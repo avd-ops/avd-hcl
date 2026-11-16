@@ -43,10 +43,11 @@ locals {
 }
 
 module "foundation" {
-  source          = "../../../modules/foundation"
-  location        = var.location
-  tags            = local.tags
-  resource_groups = local.names.resource_groups
+  source                        = "../../../modules/foundation"
+  location                      = var.location
+  tags                          = local.tags
+  resource_groups               = local.names.resource_groups
+  existing_resource_group_names = var.existing_resource_group_names
 }
 
 locals {
@@ -58,32 +59,38 @@ locals {
 }
 
 module "network" {
-  source              = "../../../modules/network"
-  prefix              = var.prefix
-  location            = var.location
-  resource_group_name = module.foundation.resource_group_names["network"]
-  tags                = local.tags
-  address_space       = var.address_space
-  subnets             = var.subnets
-  dns_servers         = local.effective_dns_servers
-  availability_zones  = var.availability_zones
-  hub_vnet_id         = local.effective_hub_vnet_id
-  create_nat_gateway  = local.effective_create_nat_gateway
-  egress_firewall_ip  = local.effective_egress_firewall_ip
+  source                               = "../../../modules/network"
+  prefix                               = var.prefix
+  location                             = var.location
+  resource_group_name                  = module.foundation.resource_group_names["network"]
+  tags                                 = local.tags
+  address_space                        = var.address_space
+  subnets                              = var.subnets
+  dns_servers                          = local.effective_dns_servers
+  availability_zones                   = var.availability_zones
+  hub_vnet_id                          = local.effective_hub_vnet_id
+  create_nat_gateway                   = local.effective_create_nat_gateway
+  egress_firewall_ip                   = local.effective_egress_firewall_ip
+  create_private_dns_zones             = var.create_private_dns_zones
+  existing_private_dns_zone_ids        = var.existing_private_dns_zone_ids
+  existing_vnet_id                     = var.existing_vnet_id
+  existing_session_hosts_subnet_id     = var.existing_session_hosts_subnet_id
+  existing_private_endpoints_subnet_id = var.existing_private_endpoints_subnet_id
 }
 
 module "monitoring" {
-  source                = "../../../modules/monitoring"
-  prefix                = var.prefix
-  name                  = local.names.log_analytics
-  location              = var.location
-  resource_group_name   = module.foundation.resource_group_names["monitoring"]
-  tags                  = local.tags
-  retention_in_days     = var.log_retention_days
-  subscription_id       = data.azurerm_subscription.current.id
-  alert_email_addresses = var.alert_email_addresses
-  monthly_budget_amount = var.monthly_budget_amount
-  budget_start_date     = var.budget_start_date
+  source                              = "../../../modules/monitoring"
+  prefix                              = var.prefix
+  name                                = local.names.log_analytics
+  location                            = var.location
+  resource_group_name                 = module.foundation.resource_group_names["monitoring"]
+  tags                                = local.tags
+  retention_in_days                   = var.log_retention_days
+  subscription_id                     = data.azurerm_subscription.current.id
+  alert_email_addresses               = var.alert_email_addresses
+  monthly_budget_amount               = var.monthly_budget_amount
+  budget_start_date                   = var.budget_start_date
+  existing_log_analytics_workspace_id = var.existing_log_analytics_workspace_id
 }
 
 module "key_vault" {
@@ -97,21 +104,26 @@ module "key_vault" {
   local_admin_username       = var.local_admin_username
   admin_group_object_ids     = var.admin_group_object_ids
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  existing_key_vault_id      = var.existing_key_vault_id
 }
 
 module "fslogix" {
-  source                     = "../../../modules/fslogix-storage"
-  name                       = local.names.storage_account
-  location                   = var.location
-  resource_group_name        = module.foundation.resource_group_names["storage"]
-  tags                       = local.tags
-  share_quota_gb             = var.fslogix_share_quota_gb
-  replication_type           = length(var.availability_zones) == 0 ? "LRS" : "ZRS"
-  private_endpoint_subnet_id = module.network.subnet_ids["private_endpoints"]
-  private_dns_zone_id        = module.network.private_dns_zone_ids["file"]
-  user_group_object_ids      = var.user_group_object_ids
-  admin_group_object_ids     = var.admin_group_object_ids
-  log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
+  source                      = "../../../modules/fslogix-storage"
+  name                        = local.names.storage_account
+  location                    = var.location
+  resource_group_name         = module.foundation.resource_group_names["storage"]
+  tags                        = local.tags
+  identity_model              = var.identity_model
+  active_directory            = var.fslogix_active_directory
+  share_quota_gb              = var.fslogix_share_quota_gb
+  replication_type            = length(var.availability_zones) == 0 ? "LRS" : "ZRS"
+  private_endpoint_subnet_id  = module.network.subnet_ids["private_endpoints"]
+  private_dns_zone_id         = module.network.private_dns_zone_ids["file"]
+  user_group_object_ids       = var.user_group_object_ids
+  admin_group_object_ids      = var.admin_group_object_ids
+  log_analytics_workspace_id  = module.monitoring.log_analytics_workspace_id
+  existing_storage_account_id = var.existing_storage_account_id
+  existing_share_name         = var.existing_share_name
 }
 
 # Microsoft documents this role at subscription scope: autoscale doesn't work properly when it
@@ -137,6 +149,7 @@ module "control_plane" {
   location                   = var.location
   resource_group_name        = module.foundation.resource_group_names["control_plane"]
   tags                       = local.tags
+  identity_model             = var.identity_model
   host_pool_name             = local.names.host_pool
   host_pool_friendly_name    = var.host_pool_friendly_name
   host_pool_type             = var.host_pool_type
@@ -144,6 +157,7 @@ module "control_plane" {
   app_group_name             = local.names.app_group
   workspace_name             = local.names.workspace
   workspace_friendly_name    = var.workspace_friendly_name
+  existing_workspace_id      = var.existing_workspace_id
   scaling_plan_name          = local.names.scaling_plan
   max_sessions_per_host      = var.max_sessions_per_host
   time_zone                  = var.time_zone
@@ -155,32 +169,38 @@ module "control_plane" {
 }
 
 module "session_hosts" {
-  source                   = "../../../modules/session-hosts"
-  location                 = var.location
-  resource_group_name      = module.foundation.resource_group_names["session_hosts"]
-  resource_group_id        = module.foundation.resource_group_ids["session_hosts"]
-  tags                     = local.tags
-  host_count               = var.host_count
-  name_prefix              = var.vm_prefix
-  host_generation          = var.host_generation
-  auto_shutdown_time       = var.auto_shutdown_time
-  time_zone                = var.time_zone
-  vm_size                  = var.vm_size
-  availability_zones       = var.availability_zones
-  marketplace_image        = var.image_id == null ? var.marketplace_image : null
-  image_id                 = var.image_id
-  encryption_at_host       = var.encryption_at_host
-  subnet_id                = module.network.subnet_ids["session_hosts"]
-  enroll_in_intune         = var.enroll_in_intune
-  local_admin_username     = var.local_admin_username
-  local_admin_password     = module.run_secrets.local_admin_password
-  key_vault_id             = module.key_vault.key_vault_id
-  registration_token       = module.run_secrets.registration_token
-  data_collection_rule_id  = module.monitoring.data_collection_rule_id
-  profile_share_unc        = module.fslogix.profile_share_unc
-  fslogix_profile_size_mib = var.fslogix_profile_size_mib
-  user_group_object_ids    = var.user_group_object_ids
-  admin_group_object_ids   = var.admin_group_object_ids
+  source                          = "../../../modules/session-hosts"
+  location                        = var.location
+  resource_group_name             = module.foundation.resource_group_names["session_hosts"]
+  resource_group_id               = module.foundation.resource_group_ids["session_hosts"]
+  tags                            = local.tags
+  identity_model                  = var.identity_model
+  host_count                      = var.host_count
+  name_prefix                     = var.vm_prefix
+  host_generation                 = var.host_generation
+  auto_shutdown_time              = var.auto_shutdown_time
+  time_zone                       = var.time_zone
+  vm_size                         = var.vm_size
+  availability_zones              = var.availability_zones
+  marketplace_image               = var.image_id == null ? var.marketplace_image : null
+  image_id                        = var.image_id
+  encryption_at_host              = var.encryption_at_host
+  subnet_id                       = module.network.subnet_ids["session_hosts"]
+  enroll_in_intune                = var.enroll_in_intune
+  domain_name                     = var.domain_name
+  domain_ou_path                  = var.domain_ou_path
+  domain_join_username            = var.domain_join_username
+  domain_join_password_secret_url = var.domain_join_password_secret_url
+  domain_join_key_vault_id        = var.domain_join_key_vault_id
+  local_admin_username            = var.local_admin_username
+  local_admin_password            = module.run_secrets.local_admin_password
+  key_vault_id                    = module.key_vault.key_vault_id
+  registration_token              = module.run_secrets.registration_token
+  data_collection_rule_id         = module.monitoring.data_collection_rule_id
+  profile_share_unc               = module.fslogix.profile_share_unc
+  fslogix_profile_size_mib        = var.fslogix_profile_size_mib
+  user_group_object_ids           = var.user_group_object_ids
+  admin_group_object_ids          = var.admin_group_object_ids
 
   # The hosts mount the profile share over its private endpoint as they register.
   depends_on = [module.fslogix, terraform_data.preflight]

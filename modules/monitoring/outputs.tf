@@ -1,6 +1,6 @@
 output "log_analytics_workspace_id" {
   description = "Log Analytics workspace ID, for diagnostic settings."
-  value       = azurerm_log_analytics_workspace.avd.id
+  value       = local.workspace_id
 }
 
 output "data_collection_rule_id" {

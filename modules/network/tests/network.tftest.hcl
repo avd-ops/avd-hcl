@@ -27,7 +27,7 @@ run "defaults" {
   }
 
   assert {
-    condition     = !azurerm_subnet.session_hosts.default_outbound_access_enabled
+    condition     = !azurerm_subnet.session_hosts[0].default_outbound_access_enabled
     error_message = "Session hosts must leave the network through the NAT gateway or a hub, not default outbound access."
   }
 }
@@ -102,4 +102,44 @@ run "no_way_out_is_rejected" {
   }
 
   expect_failures = [var.create_nat_gateway]
+}
+
+run "existing_vnet_and_subnets_are_reused" {
+  command = plan
+
+  variables {
+    existing_vnet_id                     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-existing"
+    existing_session_hosts_subnet_id     = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-existing/subnets/snet-hosts"
+    existing_private_endpoints_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-existing/subnets/snet-pe"
+    create_private_dns_zones             = false
+    existing_private_dns_zone_ids = {
+      file  = "/zones/file"
+      vault = "/zones/vault"
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_virtual_network.avd) == 0 && length(azurerm_subnet.session_hosts) == 0 && length(azurerm_nat_gateway.this) == 0
+    error_message = "Reusing an existing VNet skips VNet, subnet, NSG and NAT gateway creation."
+  }
+
+  assert {
+    condition     = output.vnet_id == var.existing_vnet_id && output.vnet_name == "vnet-existing"
+    error_message = "Existing VNet ID and name flow through outputs."
+  }
+
+  assert {
+    condition     = output.subnet_ids["session_hosts"] == var.existing_session_hosts_subnet_id && output.subnet_ids["private_endpoints"] == var.existing_private_endpoints_subnet_id
+    error_message = "Existing subnet IDs flow through outputs."
+  }
+}
+
+run "existing_vnet_requires_both_subnets" {
+  command = plan
+
+  variables {
+    existing_vnet_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-existing"
+  }
+
+  expect_failures = [var.existing_vnet_id]
 }
