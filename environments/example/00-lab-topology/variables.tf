@@ -22,7 +22,13 @@ variable "root_management_group_id" {
 
 variable "vend_subscriptions" {
   type        = bool
-  description = "When true, vend the four primary lab subscriptions via MCA billing_scope_id; when false, associate existing_subscription_ids."
+  description = "When true, vend any primary lab subscriptions not already listed in existing_subscription_ids via MCA billing_scope_id."
+  default     = false
+}
+
+variable "enable_second_workload_spoke" {
+  type        = bool
+  description = "When true, include a second AVD workload spoke subscription (lz-avd-workload-2) under landing-zones."
   default     = false
 }
 

@@ -56,3 +56,31 @@ run "mca_subscription_vending" {
     error_message = "Expected sandbox Contributor role assignment for ci_principal_id."
   }
 }
+
+run "hybrid_vending_with_second_workload_spoke" {
+  command = plan
+
+  variables {
+    vend_subscriptions           = true
+    enable_second_workload_spoke = true
+    billing_scope_id             = "/providers/Microsoft.Billing/billingAccounts/00000000/billingProfiles/00000000/invoiceSections/00000000"
+    existing_subscription_ids = {
+      "sandbox-ci" = "00000000-0000-0000-0000-000000000004"
+    }
+  }
+
+  assert {
+    condition     = length(azurerm_subscription.vended) == 4
+    error_message = "Expected four newly vended subscriptions when reusing sandbox-ci and enabling lz-avd-workload-2."
+  }
+
+  assert {
+    condition     = length(azurerm_management_group_subscription_association.lab) == 5
+    error_message = "Expected five Management Group associations (1 existing + 4 vended)."
+  }
+
+  assert {
+    condition     = length(azurerm_consumption_budget_subscription.lab) == 5
+    error_message = "Expected five per-subscription budgets."
+  }
+}
