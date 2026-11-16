@@ -65,3 +65,9 @@ variable "budget_start_date" {
     error_message = "budget_start_date must be the first of a month in YYYY-MM-01T00:00:00Z format, or null."
   }
 }
+
+variable "existing_log_analytics_workspace_id" {
+  description = "Existing Log Analytics workspace ID. When set, no new workspace is created and the AVD Insights DCR targets this workspace."
+  type        = string
+  default     = null
+}

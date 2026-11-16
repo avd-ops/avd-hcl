@@ -24,13 +24,15 @@ variable "tags" {
 }
 
 variable "private_endpoint_subnet_id" {
-  description = "Subnet for the vault private endpoint."
+  description = "Subnet for the vault private endpoint. Required when creating a new Key Vault."
   type        = string
+  default     = null
 }
 
 variable "private_dns_zone_id" {
-  description = "privatelink.vaultcore.azure.net zone ID."
+  description = "privatelink.vaultcore.azure.net zone ID. Required when creating a new Key Vault."
   type        = string
+  default     = null
 }
 
 variable "local_admin_username" {
@@ -45,6 +47,13 @@ variable "admin_group_object_ids" {
 }
 
 variable "log_analytics_workspace_id" {
-  description = "Log Analytics workspace for the vault's audit log."
+  description = "Log Analytics workspace for the vault's audit log. Required when creating a new Key Vault."
   type        = string
+  default     = null
+}
+
+variable "existing_key_vault_id" {
+  description = "Existing Key Vault ID. When set, no new Key Vault, private endpoint or diagnostic setting is created; break-glass secrets and role assignments target this vault."
+  type        = string
+  default     = null
 }

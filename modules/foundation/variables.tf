@@ -30,3 +30,13 @@ variable "resource_groups" {
     error_message = "resource_groups must contain the keys network, control_plane, session_hosts, storage and monitoring."
   }
 }
+
+variable "existing_resource_group_names" {
+  description = "Optional existing resource group names keyed by role (network, control_plane, session_hosts, storage, monitoring). Roles listed here are looked up instead of created."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition     = alltrue([for k in keys(var.existing_resource_group_names) : contains(["network", "control_plane", "session_hosts", "storage", "monitoring"], k)])
+    error_message = "existing_resource_group_names keys must be from network, control_plane, session_hosts, storage and monitoring."
+  }
+}

@@ -3,10 +3,12 @@
 # Changes: written in Terraform; optional action group and subscription consumption budget.
 
 locals {
-  deploy_budget = var.monthly_budget_amount != null && var.budget_start_date != null && var.subscription_id != null && length(var.alert_email_addresses) > 0
+  use_existing_workspace = var.existing_log_analytics_workspace_id != null
+  deploy_budget          = var.monthly_budget_amount != null && var.budget_start_date != null && var.subscription_id != null && length(var.alert_email_addresses) > 0
 }
 
 resource "azurerm_log_analytics_workspace" "avd" {
+  count                        = local.use_existing_workspace ? 0 : 1
   name                         = var.name
   location                     = var.location
   resource_group_name          = var.resource_group_name
@@ -14,6 +16,10 @@ resource "azurerm_log_analytics_workspace" "avd" {
   retention_in_days            = var.retention_in_days
   local_authentication_enabled = false
   tags                         = var.tags
+}
+
+locals {
+  workspace_id = local.use_existing_workspace ? var.existing_log_analytics_workspace_id : azurerm_log_analytics_workspace.avd[0].id
 }
 
 # AVD Insights only recognizes data collection rules whose name starts with "microsoft-avdi-".
@@ -29,7 +35,7 @@ resource "azurerm_monitor_data_collection_rule" "avd_insights" {
   destinations {
     log_analytics {
       name                  = "law"
-      workspace_resource_id = azurerm_log_analytics_workspace.avd.id
+      workspace_resource_id = local.workspace_id
     }
   }
 

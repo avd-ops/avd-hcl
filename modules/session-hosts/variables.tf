@@ -109,10 +109,50 @@ variable "subnet_id" {
   type        = string
 }
 
+variable "identity_model" {
+  description = "Directory join model for session hosts: entra_only (Entra ID joined, default) or ad_ds (Active Directory Domain Services via JsonADDomainExtension)."
+  type        = string
+  default     = "entra_only"
+  validation {
+    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only or ad_ds."
+  }
+}
+
 variable "enroll_in_intune" {
-  description = "Enroll the hosts in Intune when they join Entra ID."
+  description = "Enroll the hosts in Intune when they join Entra ID (entra_only)."
   type        = bool
   default     = false
+}
+
+variable "domain_name" {
+  description = "AD DS domain FQDN (for example corp.contoso.com). Required when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_ou_path" {
+  description = "Optional AD DS organizational unit distinguished name for session host computer objects."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_username" {
+  description = "AD DS domain-join account username. Required when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_password_secret_url" {
+  description = "Versioned Key Vault secret URI (https://<vault>.vault.azure.net/secrets/<name>/<version>) holding the domain-join JSON protectedSettings ({\"Password\": \"...\"}). Required when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_key_vault_id" {
+  description = "Key Vault resource ID holding domain_join_password_secret_url. Defaults to key_vault_id when null."
+  type        = string
+  default     = null
 }
 
 variable "local_admin_username" {

@@ -113,3 +113,33 @@ run "personal_desktop" {
     error_message = "Personal pools skip the pooled scaling plan."
   }
 }
+
+run "existing_workspace_and_ad_ds_rdp_properties" {
+  command = plan
+
+  variables {
+    identity_model        = "ad_ds"
+    existing_workspace_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd/providers/Microsoft.DesktopVirtualization/workspaces/vdws-existing"
+    workspace_name        = null
+  }
+
+  assert {
+    condition     = length(azurerm_virtual_desktop_workspace.this) == 0 && output.workspace_id == var.existing_workspace_id
+    error_message = "Reusing an existing workspace skips workspace creation and attaches the app group to it."
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_workspace_application_group_association.desktop.workspace_id == var.existing_workspace_id
+    error_message = "Desktop application group associates with the existing workspace."
+  }
+
+  assert {
+    condition     = !strcontains(azurerm_virtual_desktop_host_pool.this.custom_rdp_properties, "targetisaadjoined:i:1")
+    error_message = "AD DS host pools must not set targetisaadjoined:i:1."
+  }
+
+  assert {
+    condition     = length(azurerm_monitor_diagnostic_setting.this) == 3
+    error_message = "Diagnostic settings cover the new host pool, app group and scaling plan, not the existing workspace."
+  }
+}

@@ -8,9 +8,16 @@
 # data plane: a runner outside the VNet can't reach a vault with public access disabled, but ARM
 # can still create secrets in it.
 
+locals {
+  use_existing_vault = var.existing_key_vault_id != null
+  key_vault_id       = local.use_existing_vault ? var.existing_key_vault_id : azurerm_key_vault.this[0].id
+  key_vault_name     = local.use_existing_vault ? element(split("/", var.existing_key_vault_id), length(split("/", var.existing_key_vault_id)) - 1) : azurerm_key_vault.this[0].name
+}
+
 data "azurerm_client_config" "current" {}
 
 resource "azurerm_key_vault" "this" {
+  count                         = local.use_existing_vault ? 0 : 1
   name                          = var.name
   location                      = var.location
   resource_group_name           = var.resource_group_name
@@ -26,9 +33,17 @@ resource "azurerm_key_vault" "this" {
     bypass         = "AzureServices"
     default_action = "Deny"
   }
+
+  lifecycle {
+    precondition {
+      condition     = var.private_endpoint_subnet_id != null && var.private_dns_zone_id != null && var.log_analytics_workspace_id != null
+      error_message = "private_endpoint_subnet_id, private_dns_zone_id and log_analytics_workspace_id are required when creating a new Key Vault."
+    }
+  }
 }
 
 resource "azurerm_private_endpoint" "vault" {
+  count               = local.use_existing_vault ? 0 : 1
   name                = "pe-${var.name}-vault"
   location            = var.location
   resource_group_name = var.resource_group_name
@@ -37,7 +52,7 @@ resource "azurerm_private_endpoint" "vault" {
 
   private_service_connection {
     name                           = "vault"
-    private_connection_resource_id = azurerm_key_vault.this.id
+    private_connection_resource_id = azurerm_key_vault.this[0].id
     subresource_names              = ["vault"]
     is_manual_connection           = false
   }
@@ -50,7 +65,7 @@ resource "azurerm_private_endpoint" "vault" {
 
 resource "azapi_resource_action" "local_admin_username" {
   type        = "Microsoft.KeyVault/vaults/secrets@2023-07-01"
-  resource_id = "${azurerm_key_vault.this.id}/secrets/sessionhost-localadmin-username"
+  resource_id = "${local.key_vault_id}/secrets/sessionhost-localadmin-username"
   method      = "PUT"
   body = {
     properties = {
@@ -61,15 +76,16 @@ resource "azapi_resource_action" "local_admin_username" {
 
 resource "azurerm_role_assignment" "admins_read_secrets" {
   for_each             = toset(var.admin_group_object_ids)
-  scope                = azurerm_key_vault.this.id
+  scope                = local.key_vault_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = each.value
   principal_type       = "Group"
 }
 
 resource "azurerm_monitor_diagnostic_setting" "vault" {
+  count                      = local.use_existing_vault ? 0 : 1
   name                       = "to-log-analytics"
-  target_resource_id         = azurerm_key_vault.this.id
+  target_resource_id         = azurerm_key_vault.this[0].id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
   enabled_log {

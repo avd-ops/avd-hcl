@@ -63,8 +63,8 @@ class AnswersTest(unittest.TestCase):
             self.resolve({"user_groups": [USERS], "vm_szie": "Standard_D2s_v5"})
 
     def test_unsupported_choice_says_why(self):
-        with self.assertRaisesRegex(answers.AnswerError, "isn't built yet"):
-            self.resolve({"user_groups": [USERS], "identity_model": "ad_ds"})
+        with self.assertRaisesRegex(answers.AnswerError, "later phase"):
+            self.resolve({"user_groups": [USERS], "identity_model": "entra_ds"})
 
     def test_prefix_rules_match_terraform(self):
         with self.assertRaisesRegex(answers.AnswerError, "prefix"):

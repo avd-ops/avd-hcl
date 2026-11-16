@@ -27,12 +27,12 @@ run "private_rbac_vault" {
   command = plan
 
   assert {
-    condition     = azurerm_key_vault.this.rbac_authorization_enabled && azurerm_key_vault.this.purge_protection_enabled
+    condition     = azurerm_key_vault.this[0].rbac_authorization_enabled && azurerm_key_vault.this[0].purge_protection_enabled
     error_message = "The vault must use RBAC and purge protection."
   }
 
   assert {
-    condition     = !azurerm_key_vault.this.public_network_access_enabled
+    condition     = !azurerm_key_vault.this[0].public_network_access_enabled
     error_message = "The vault must not be reachable from the internet."
   }
 
@@ -50,4 +50,30 @@ run "double_hyphen_is_rejected" {
   }
 
   expect_failures = [var.name]
+}
+
+run "existing_key_vault_is_reused" {
+  command = plan
+
+  variables {
+    existing_key_vault_id      = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-sec/providers/Microsoft.KeyVault/vaults/kv-existing"
+    private_endpoint_subnet_id = null
+    private_dns_zone_id        = null
+    log_analytics_workspace_id = null
+  }
+
+  assert {
+    condition     = length(azurerm_key_vault.this) == 0 && length(azurerm_private_endpoint.vault) == 0 && length(azurerm_monitor_diagnostic_setting.vault) == 0
+    error_message = "Reusing an existing Key Vault skips vault, private endpoint and diagnostic setting creation."
+  }
+
+  assert {
+    condition     = output.key_vault_id == var.existing_key_vault_id && output.key_vault_name == "kv-existing"
+    error_message = "Existing Key Vault ID and name flow through outputs."
+  }
+
+  assert {
+    condition     = azapi_resource_action.local_admin_username.resource_id == "${var.existing_key_vault_id}/secrets/sessionhost-localadmin-username"
+    error_message = "Break-glass username secret targets the existing Key Vault."
+  }
 }

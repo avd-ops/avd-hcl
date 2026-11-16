@@ -157,7 +157,7 @@ resource "azapi_resource_action" "local_admin_password" {
 
 # Extensions on one VM are written one at a time, so each kind waits for the one before it.
 resource "azurerm_virtual_machine_extension" "entra_join" {
-  for_each                   = local.hosts
+  for_each                   = var.identity_model == "entra_only" ? local.hosts : {}
   name                       = "AADLoginForWindows"
   virtual_machine_id         = azapi_resource.host[each.key].id
   publisher                  = "Microsoft.Azure.ActiveDirectory"
@@ -169,6 +169,38 @@ resource "azurerm_virtual_machine_extension" "entra_join" {
 
   lifecycle {
     ignore_changes = [settings, tags]
+  }
+}
+
+resource "azurerm_virtual_machine_extension" "ad_join" {
+  for_each                   = var.identity_model == "ad_ds" ? local.hosts : {}
+  name                       = "JsonADDomainExtension"
+  virtual_machine_id         = azapi_resource.host[each.key].id
+  publisher                  = "Microsoft.Compute"
+  type                       = "JsonADDomainExtension"
+  type_handler_version       = "1.3"
+  auto_upgrade_minor_version = true
+  settings = jsonencode({
+    Name    = var.domain_name
+    OUPath  = coalesce(var.domain_ou_path, "")
+    User    = var.domain_join_username
+    Restart = "true"
+    Options = "3"
+  })
+  tags = var.tags
+
+  protected_settings_from_key_vault {
+    secret_url      = var.domain_join_password_secret_url
+    source_vault_id = coalesce(var.domain_join_key_vault_id, var.key_vault_id)
+  }
+
+  lifecycle {
+    ignore_changes = [settings, protected_settings_from_key_vault, tags]
+
+    precondition {
+      condition     = var.domain_name != null && var.domain_join_username != null && var.domain_join_password_secret_url != null
+      error_message = "ad_ds identity_model requires domain_name, domain_join_username and domain_join_password_secret_url."
+    }
   }
 }
 
@@ -187,7 +219,10 @@ resource "azurerm_virtual_machine_extension" "monitor_agent" {
     ignore_changes = [tags]
   }
 
-  depends_on = [azurerm_virtual_machine_extension.entra_join]
+  depends_on = [
+    azurerm_virtual_machine_extension.entra_join,
+    azurerm_virtual_machine_extension.ad_join,
+  ]
 }
 
 resource "azurerm_virtual_machine_extension" "guest_configuration" {

@@ -2,19 +2,19 @@
 
 output "vnet_id" {
   description = "AVD spoke VNet ID. Peer the hub back to this (the hub side is not managed here)."
-  value       = azurerm_virtual_network.avd.id
+  value       = local.vnet_id
 }
 
 output "vnet_name" {
   description = "AVD spoke VNet name."
-  value       = azurerm_virtual_network.avd.name
+  value       = local.vnet_name
 }
 
 output "subnet_ids" {
   description = "Subnet IDs keyed by role."
   value = {
-    session_hosts     = azurerm_subnet.session_hosts.id
-    private_endpoints = azurerm_subnet.private_endpoints.id
+    session_hosts     = local.use_existing_network ? var.existing_session_hosts_subnet_id : azurerm_subnet.session_hosts[0].id
+    private_endpoints = local.use_existing_network ? var.existing_private_endpoints_subnet_id : azurerm_subnet.private_endpoints[0].id
   }
 }
 

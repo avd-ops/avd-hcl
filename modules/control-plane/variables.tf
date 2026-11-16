@@ -58,12 +58,19 @@ variable "desktop_display_name" {
 }
 
 variable "workspace_name" {
-  description = "Workspace name."
+  description = "Workspace name. Required when existing_workspace_id is null."
   type        = string
+  default     = null
 }
 
 variable "workspace_friendly_name" {
   description = "Workspace name users see in the Windows App feed."
+  type        = string
+  default     = null
+}
+
+variable "existing_workspace_id" {
+  description = "Existing AVD workspace ID. When set, no new workspace is created and the desktop application group attaches to this workspace."
   type        = string
   default     = null
 }
@@ -83,10 +90,20 @@ variable "max_sessions_per_host" {
   }
 }
 
-variable "rdp_properties" {
-  description = "Custom RDP properties for the host pool. The default is the landing zone's: Entra single sign-on, no drive, USB or COM redirection."
+variable "identity_model" {
+  description = "Directory join model for the host pool's session hosts: entra_only (default) or ad_ds. Controls default RDP properties when rdp_properties is null."
   type        = string
-  default     = "enablerdsaadauth:i:1;targetisaadjoined:i:1;drivestoredirect:s:;usbdevicestoredirect:s:;redirectcomports:i:0;redirectsmartcards:i:1;redirectprinters:i:1;redirectclipboard:i:1;redirectwebauthn:i:1;audiomode:i:0;audiocapturemode:i:1;camerastoredirect:s:*;use multimon:i:1"
+  default     = "entra_only"
+  validation {
+    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only or ad_ds."
+  }
+}
+
+variable "rdp_properties" {
+  description = "Custom RDP properties for the host pool. Null selects the default for identity_model (Entra SSO for entra_only; no targetisaadjoined for ad_ds)."
+  type        = string
+  default     = null
 }
 
 variable "validation_environment" {

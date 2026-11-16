@@ -41,18 +41,28 @@ variable "share_quota_gb" {
   }
 }
 
-variable "identity_source" {
-  description = "How session hosts authenticate to the share: AADKERB (Entra Kerberos, Entra-joined or hybrid hosts), AADDS (Entra Domain Services) or AD (on-prem AD DS)."
+variable "identity_model" {
+  description = "Directory join model: entra_only (Entra Kerberos, default) or ad_ds (AD DS SMB). Overridden when identity_source is set explicitly."
   type        = string
-  default     = "AADKERB"
+  default     = "entra_only"
   validation {
-    condition     = contains(["AADKERB", "AADDS", "AD"], var.identity_source)
-    error_message = "identity_source must be AADKERB, AADDS or AD."
+    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only or ad_ds."
+  }
+}
+
+variable "identity_source" {
+  description = "Optional explicit Azure Files authentication directory_type: AADKERB, AADDS, or AD. Null derives it from identity_model."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.identity_source == null || contains(["AADKERB", "AADDS", "AD"], var.identity_source)
+    error_message = "identity_source must be AADKERB, AADDS, AD, or null."
   }
 }
 
 variable "active_directory" {
-  description = "AD DS domain details. Required when identity_source is AD; the computer account must be created with AzFilesHybrid separately."
+  description = "AD DS domain details. Required when effective identity source is AD; the computer account must be created with AzFilesHybrid separately."
   type = object({
     domain_name         = string
     domain_guid         = string
@@ -65,13 +75,15 @@ variable "active_directory" {
 }
 
 variable "private_endpoint_subnet_id" {
-  description = "Subnet for the file private endpoint."
+  description = "Subnet for the file private endpoint. Required when creating a new storage account."
   type        = string
+  default     = null
 }
 
 variable "private_dns_zone_id" {
-  description = "privatelink.file.core.windows.net zone ID."
+  description = "privatelink.file.core.windows.net zone ID. Required when creating a new storage account."
   type        = string
+  default     = null
 }
 
 variable "user_group_object_ids" {
@@ -97,6 +109,19 @@ variable "replication_type" {
 }
 
 variable "log_analytics_workspace_id" {
-  description = "Log Analytics workspace for the file service's logs and transaction metrics."
+  description = "Log Analytics workspace for the file service's logs and transaction metrics. Required when creating a new storage account."
   type        = string
+  default     = null
+}
+
+variable "existing_storage_account_id" {
+  description = "Existing storage account ID for FSLogix profiles. When set, no new storage account, private endpoint or diagnostic setting is created."
+  type        = string
+  default     = null
+}
+
+variable "existing_share_name" {
+  description = "Existing file share name on existing_storage_account_id. When set with existing_storage_account_id, skips creating the file share."
+  type        = string
+  default     = null
 }

@@ -175,3 +175,42 @@ run "bad_auto_shutdown_time_is_rejected" {
 
   expect_failures = [var.auto_shutdown_time]
 }
+
+run "ad_ds_domain_join_uses_key_vault_extension" {
+  command = plan
+
+  variables {
+    host_count                      = 1
+    identity_model                  = "ad_ds"
+    domain_name                     = "corp.contoso.com"
+    domain_ou_path                  = "OU=AVD,DC=corp,DC=contoso,DC=com"
+    domain_join_username            = "avdjoin@contoso.com"
+    domain_join_password_secret_url = "https://kv-test.vault.azure.net/secrets/domain-join-password/00000000000000000000000000000001"
+  }
+
+  assert {
+    condition     = length(azurerm_virtual_machine_extension.entra_join) == 0 && length(azurerm_virtual_machine_extension.ad_join) == 1
+    error_message = "ad_ds uses JsonADDomainExtension instead of AADLoginForWindows."
+  }
+
+  assert {
+    condition     = jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).Name == "corp.contoso.com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).OUPath == "OU=AVD,DC=corp,DC=contoso,DC=com" && jsondecode(azurerm_virtual_machine_extension.ad_join["avdtest-001"].settings).User == "avdjoin@contoso.com"
+    error_message = "Domain name, OU path and username are passed to JsonADDomainExtension."
+  }
+
+  assert {
+    condition     = one(azurerm_virtual_machine_extension.ad_join["avdtest-001"].protected_settings_from_key_vault).secret_url == var.domain_join_password_secret_url && one(azurerm_virtual_machine_extension.ad_join["avdtest-001"].protected_settings_from_key_vault).source_vault_id == var.key_vault_id
+    error_message = "Domain-join password is read from Key Vault without entering state."
+  }
+}
+
+run "ad_ds_requires_domain_join_inputs" {
+  command = plan
+
+  variables {
+    host_count     = 1
+    identity_model = "ad_ds"
+  }
+
+  expect_failures = [azurerm_virtual_machine_extension.ad_join]
+}

@@ -15,7 +15,7 @@ output "app_group_id" {
 
 output "workspace_id" {
   description = "Workspace ID."
-  value       = azurerm_virtual_desktop_workspace.this.id
+  value       = local.workspace_id
 }
 
 output "registration_host_pool_id" {

@@ -5,8 +5,13 @@
 # Resource providers are registered by the azurerm provider block in the root module
 # (resource_providers_to_register), which skips any already registered.
 
+data "azurerm_resource_group" "existing" {
+  for_each = var.existing_resource_group_names
+  name     = each.value
+}
+
 resource "azurerm_resource_group" "this" {
-  for_each = var.resource_groups
+  for_each = { for k, v in var.resource_groups : k => v if !contains(keys(var.existing_resource_group_names), k) }
   name     = each.value
   location = var.location
   tags     = merge(var.tags, { "avd-kit-role" = each.key })

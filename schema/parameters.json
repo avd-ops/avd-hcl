@@ -88,7 +88,7 @@
       "phase": "discover",
       "type": "enum",
       "question": "How will the session hosts join a directory?",
-      "help": "Entra-joined needs no domain controllers and uses Entra Kerberos for the FSLogix share. It is the only model the kit builds for now.",
+      "help": "Entra-joined needs no domain controllers and uses Entra Kerberos for the FSLogix share. Active Directory Domain Services (hybrid) uses JsonADDomainExtension with Key Vault-backed credentials and AD DS SMB.",
       "choices": [
         {
           "value": "entra_joined",
@@ -102,9 +102,7 @@
         },
         {
           "value": "ad_ds",
-          "label": "Active Directory Domain Services (hybrid)",
-          "supported": false,
-          "reason": "Domain join and the AzFilesHybrid step come in a later phase."
+          "label": "Active Directory Domain Services (hybrid)"
         }
       ],
       "default": "entra_joined",
@@ -674,6 +672,210 @@
         {
           "stage": "platform",
           "path": "budget_start_date",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "domain_name",
+      "phase": "configure",
+      "type": "string",
+      "question": "AD DS domain FQDN (for example corp.contoso.com)?",
+      "help": "Required when identity_model is ad_ds.",
+      "when": {
+        "identity_model": ["ad_ds"]
+      },
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "domain_name",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "domain_ou_path",
+      "phase": "configure",
+      "type": "string",
+      "question": "AD DS organizational unit distinguished name (optional)?",
+      "help": "Leave blank to join the default Computers container.",
+      "when": {
+        "identity_model": ["ad_ds"]
+      },
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "domain_ou_path",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "domain_join_username",
+      "phase": "configure",
+      "type": "string",
+      "question": "AD DS domain-join account username?",
+      "help": "Account delegated to join session hosts to the domain.",
+      "when": {
+        "identity_model": ["ad_ds"]
+      },
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "domain_join_username",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "domain_join_password_secret_url",
+      "phase": "configure",
+      "type": "string",
+      "question": "Versioned Key Vault secret URI for the domain-join password?",
+      "help": "Versioned Key Vault secret URI passed to JsonADDomainExtension via protected_settings_from_key_vault so no secret enters state.",
+      "when": {
+        "identity_model": ["ad_ds"]
+      },
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "domain_join_password_secret_url",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_vnet_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing AVD spoke VNet resource ID (optional)?",
+      "help": "Leave blank to create a new spoke VNet. When set, also provide existing_session_hosts_subnet_id and existing_private_endpoints_subnet_id.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_vnet_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_session_hosts_subnet_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing session hosts subnet resource ID (optional)?",
+      "help": "Required when existing_vnet_id is set.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_session_hosts_subnet_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_private_endpoints_subnet_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing private endpoints subnet resource ID (optional)?",
+      "help": "Required when existing_vnet_id is set.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_private_endpoints_subnet_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_log_analytics_workspace_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing Log Analytics workspace resource ID (optional)?",
+      "help": "Leave blank to create a new Log Analytics workspace.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_log_analytics_workspace_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_key_vault_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing Key Vault resource ID (optional)?",
+      "help": "Leave blank to create a new Key Vault.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_key_vault_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_storage_account_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing FSLogix storage account resource ID (optional)?",
+      "help": "Leave blank to create a new Azure Files Premium storage account.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_storage_account_id",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_share_name",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing FSLogix file share name (optional)?",
+      "help": "Used with existing_storage_account_id to reuse an existing share instead of creating one.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_share_name",
+          "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "existing_workspace_id",
+      "phase": "configure",
+      "type": "string",
+      "question": "Existing AVD workspace resource ID (optional)?",
+      "help": "Leave blank to create a new AVD workspace; when set, attaches the new desktop application group to it.",
+      "default": null,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "existing_workspace_id",
           "omit_empty": true
         }
       ],

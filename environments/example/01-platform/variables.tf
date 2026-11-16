@@ -287,3 +287,122 @@ variable "budget_start_date" {
     error_message = "budget_start_date must be the first of a month in YYYY-MM-01T00:00:00Z format, or null."
   }
 }
+
+variable "identity_model" {
+  description = "Directory join model for session hosts and FSLogix: entra_only (default) or ad_ds (hybrid AD DS)."
+  type        = string
+  default     = "entra_only"
+  validation {
+    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only or ad_ds."
+  }
+}
+
+variable "domain_name" {
+  description = "AD DS domain FQDN (for example corp.contoso.com) when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_ou_path" {
+  description = "Optional AD DS organizational unit distinguished name for session host computer objects."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_username" {
+  description = "AD DS domain-join account username when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_password_secret_url" {
+  description = "Key Vault secret URI holding the domain-join password/protectedSettings when identity_model is ad_ds."
+  type        = string
+  default     = null
+}
+
+variable "domain_join_key_vault_id" {
+  description = "Key Vault resource ID holding domain_join_password_secret_url. Defaults to the platform Key Vault."
+  type        = string
+  default     = null
+}
+
+variable "fslogix_active_directory" {
+  description = "AD DS domain details for Azure Files when identity_model is ad_ds."
+  type = object({
+    domain_name         = string
+    domain_guid         = string
+    domain_sid          = optional(string)
+    forest_name         = optional(string)
+    netbios_domain_name = optional(string)
+    storage_sid         = optional(string)
+  })
+  default = null
+}
+
+variable "existing_resource_group_names" {
+  description = "Optional existing resource group names keyed by role (network, control_plane, session_hosts, storage, monitoring)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "existing_vnet_id" {
+  description = "Existing AVD spoke VNet ID. When set, skips creating VNet/subnets/NSGs/NAT/route table; set existing_session_hosts_subnet_id and existing_private_endpoints_subnet_id."
+  type        = string
+  default     = null
+}
+
+variable "existing_session_hosts_subnet_id" {
+  description = "Existing session host subnet ID when reusing an existing VNet."
+  type        = string
+  default     = null
+}
+
+variable "existing_private_endpoints_subnet_id" {
+  description = "Existing private endpoint subnet ID when reusing an existing VNet."
+  type        = string
+  default     = null
+}
+
+variable "create_private_dns_zones" {
+  description = "Create privatelink DNS zones in the AVD spoke. Set false when reusing existing zones."
+  type        = bool
+  default     = true
+}
+
+variable "existing_private_dns_zone_ids" {
+  description = "Existing privatelink DNS zone IDs keyed by file, vault and blob when create_private_dns_zones is false."
+  type        = map(string)
+  default     = {}
+}
+
+variable "existing_log_analytics_workspace_id" {
+  description = "Existing Log Analytics workspace ID to reuse instead of creating one."
+  type        = string
+  default     = null
+}
+
+variable "existing_key_vault_id" {
+  description = "Existing Key Vault ID to reuse instead of creating one."
+  type        = string
+  default     = null
+}
+
+variable "existing_storage_account_id" {
+  description = "Existing FSLogix storage account ID to reuse instead of creating one."
+  type        = string
+  default     = null
+}
+
+variable "existing_share_name" {
+  description = "Existing FSLogix file share name on existing_storage_account_id."
+  type        = string
+  default     = null
+}
+
+variable "existing_workspace_id" {
+  description = "Existing AVD workspace ID to attach the new host pool's desktop application group to."
+  type        = string
+  default     = null
+}
