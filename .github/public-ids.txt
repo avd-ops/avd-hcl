@@ -12,3 +12,11 @@
 # Microsoft Graph application ID, looked up to grant the pipeline identities their Graph roles
 # https://learn.microsoft.com/troubleshoot/entra/entra-id/governance/verify-first-party-apps-sign-in
 00000003-0000-0000-c000-000000000000
+
+# Azure built-in Contributor role definition ID (for Azure Lighthouse authorizations)
+# https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/privileged#contributor
+b24988ac-6180-42a0-ab88-20f7382dd24c
+
+# Azure built-in Managed Services Registration Assignment Delete Role (for Azure Lighthouse cleanup)
+# https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/management-and-governance#managed-services-registration-assignment-delete-role
+91c1777a-f3dc-4fae-b103-61d183457e46

@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (gitignored) and fill in your tenant and principal values.
+# Never commit real tenant, subscription, or object IDs.
+
+target_tenant_id       = "00000000-0000-0000-0000-000000000020"
+target_subscription_id = "00000000-0000-0000-0000-000000000021"
+managing_tenant_id     = "00000000-0000-0000-0000-000000000010"
+
+authorizations = [
+  {
+    principal_id           = "00000000-0000-0000-0000-000000000030"
+    principal_display_name = "contoso-lab-admins"
+    role_definition_id     = "b24988ac-6180-42a0-ab88-20f7382dd24c" # Contributor
+  },
+  {
+    principal_id           = "00000000-0000-0000-0000-000000000031"
+    principal_display_name = "contoso-lighthouse-cleanup"
+    role_definition_id     = "91c1777a-f3dc-4fae-b103-61d183457e46" # Managed Services Registration Assignment Delete Role
+  },
+]
