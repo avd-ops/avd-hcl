@@ -38,6 +38,9 @@ if ($env:INSTALL_EVERGREEN -eq 'True') {
         Install-Module -Name Evergreen -Scope AllUsers -Force -AllowClobber
     }
     Import-Module Evergreen -ErrorAction Stop
+    if ($null -ne (Get-Command -Name 'Update-Evergreen' -ErrorAction SilentlyContinue)) {
+        Update-Evergreen | Out-Null
+    }
 }
 
 if (-not (Test-Path 'C:\Program Files\FSLogix\Apps\frx.exe')) {
@@ -47,6 +50,9 @@ if (-not (Test-Path 'C:\Program Files\FSLogix\Apps\frx.exe')) {
         Install-Module -Name Evergreen -Scope AllUsers -Force -AllowClobber
     }
     Import-Module Evergreen -ErrorAction Stop
+    if ($null -ne (Get-Command -Name 'Update-Evergreen' -ErrorAction SilentlyContinue)) {
+        Update-Evergreen | Out-Null
+    }
     $fsl = Get-EvergreenApp -Name MicrosoftFSLogixApps | Where-Object { $_.Channel -eq 'Production' } | Select-Object -First 1
     if ($null -eq $fsl -or [string]::IsNullOrWhiteSpace($fsl.URI)) {
         throw 'Evergreen returned no Production download URI for MicrosoftFSLogixApps.'
