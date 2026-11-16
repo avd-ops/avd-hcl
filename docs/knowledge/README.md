@@ -17,6 +17,8 @@ page, not a copy.
   questions and the phased order.
 - [platform.md](platform.md): what the platform stage builds, where each module comes from,
   and the gotchas found writing it.
+- [lab-topology.md](lab-topology.md): the 4-subscription ALZ Management Group, MCA vending,
+  and budget bootstrap (`modules/lab-topology`).
 - [pipeline.md](pipeline.md): the gated deploy pipeline, who can do what, and why a private
   repository can't use it yet.
 - [readiness.md](readiness.md): the read-only check before the platform stage, every check and
