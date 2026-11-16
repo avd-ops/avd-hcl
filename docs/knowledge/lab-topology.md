@@ -18,6 +18,8 @@ last_reviewed: 2026-11-15
 - **CI isolation:** Optional `ci_principal_id` grants `Contributor` scoped to the `sandbox` Management Group for `sandbox-ci` OIDC runners.
 - **Subscription baseline (`modules/subscription-baseline`):** Registers the required Azure Resource Providers (`Microsoft.DesktopVirtualization`, `Microsoft.Compute`, `Microsoft.Network`, `Microsoft.Storage`, `Microsoft.KeyVault`, `Microsoft.OperationalInsights`, `Microsoft.ManagedServices`, `Microsoft.Quota`) on each target subscription.
 - **T2T Azure Lighthouse (`modules/t2t-lighthouse` and `environments/example/00-t2t-lighthouse`):** Registers providers on the secondary tenant's `t2t-lab` subscription and creates the `azurerm_lighthouse_definition` and `azurerm_lighthouse_assignment` delegating access to the primary lab tenant.
+- **Entra Cross-Tenant Access (`modules/cross-tenant-access`):** Configures partner B2B collaboration, inbound MFA/device trust, and automatic user consent settings via `msgraph_resource` (`policies/crossTenantAccessPolicy/partners`).
+- **Hub-to-spoke peering (`modules/hub-spoke-peering`):** Completes the `platform-connectivity` hub side of multi-subscription peering (`azurerm_virtual_network_peering`) and links central Private DNS zones to spoke VNets (`lz-avd-workload`).
 
 ## Manual prerequisites
 
