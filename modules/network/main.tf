@@ -8,11 +8,14 @@ locals {
   vnet_id              = local.use_existing_network ? var.existing_vnet_id : azurerm_virtual_network.avd[0].id
   vnet_name            = local.use_existing_network ? element(split("/", var.existing_vnet_id), length(split("/", var.existing_vnet_id)) - 1) : azurerm_virtual_network.avd[0].name
 
-  private_dns_zones = {
-    file  = "privatelink.file.core.windows.net"
-    vault = "privatelink.vaultcore.azure.net"
-    blob  = "privatelink.blob.core.windows.net"
-  }
+  private_dns_zones = merge(
+    {
+      file  = "privatelink.file.core.windows.net"
+      vault = "privatelink.vaultcore.azure.net"
+      blob  = "privatelink.blob.core.windows.net"
+    },
+    var.enable_avd_private_link ? { avd = "privatelink.wvd.microsoft.com" } : {},
+  )
 }
 
 resource "azurerm_virtual_network" "avd" {

@@ -164,3 +164,18 @@ import {
   id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-avd/providers/Microsoft.DesktopVirtualization/applicationGroups/vdag-existing"
 }
 ```
+
+## Estate Stage, Private Link, RemoteApp, Entra DS, Verify & Handover
+
+- **Per-host-pool `estate` stage (`environments/example/03-host-pool/`):** Attaches an
+  independent host pool, application group, scaling plan, and session hosts to an existing
+  platform (workspace, VNet, Key Vault, Log Analytics, FSLogix share).
+- **AVD Private Link (`enable_avd_private_link` / `enable_private_link`):** Adds
+  `privatelink.wvd.microsoft.com` in `modules/network` and `connection` / `feed` private
+  endpoints in `modules/control-plane`, disabling public network access when enabled.
+- **RemoteApp & Entra Domain Services (`entra_ds`):** `modules/control-plane` supports
+  `app_group_type = "RemoteApp"` (setting `preferred_app_group_type = "RailApplications"` on
+  the host pool and publishing `azurerm_virtual_desktop_application` items). `entra_ds` joins
+  hosts via `JsonADDomainExtension` and sets FSLogix `directory_type = "AADDS"`.
+- **Verify & Handover (`scripts/verify/check.py`, `scripts/handover/runbook.py`):** Read-only
+  post-deploy health checks via `az` CLI and markdown runbook generation from Terraform outputs.

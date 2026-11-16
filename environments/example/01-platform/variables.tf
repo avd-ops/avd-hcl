@@ -289,12 +289,12 @@ variable "budget_start_date" {
 }
 
 variable "identity_model" {
-  description = "Directory join model for session hosts and FSLogix: entra_only (default) or ad_ds (hybrid AD DS)."
+  description = "Directory join model for session hosts and FSLogix: entra_only (default), ad_ds (hybrid AD DS), or entra_ds (Entra Domain Services)."
   type        = string
   default     = "entra_only"
   validation {
-    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
-    error_message = "identity_model must be entra_only or ad_ds."
+    condition     = contains(["entra_only", "ad_ds", "entra_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only, ad_ds or entra_ds."
   }
 }
 
@@ -405,4 +405,35 @@ variable "existing_workspace_id" {
   description = "Existing AVD workspace ID to attach the new host pool's desktop application group to."
   type        = string
   default     = null
+}
+
+variable "enable_avd_private_link" {
+  description = "Enable AVD Private Link (privatelink.wvd.microsoft.com DNS zone + host pool/workspace private endpoints)."
+  type        = bool
+  default     = false
+}
+
+variable "app_group_type" {
+  description = "Application group type: Desktop (default) or RemoteApp."
+  type        = string
+  default     = "Desktop"
+  validation {
+    condition     = contains(["Desktop", "RemoteApp"], var.app_group_type)
+    error_message = "app_group_type must be Desktop or RemoteApp."
+  }
+}
+
+variable "remote_apps" {
+  description = "Map of RemoteApp applications to publish when app_group_type is RemoteApp."
+  type = map(object({
+    friendly_name                = optional(string)
+    description                  = optional(string)
+    path                         = string
+    command_line_argument_policy = optional(string, "DoNotAllow")
+    command_line_arguments       = optional(string)
+    show_in_portal               = optional(bool, true)
+    icon_path                    = optional(string)
+    icon_index                   = optional(number, 0)
+  }))
+  default = {}
 }

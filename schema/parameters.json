@@ -96,9 +96,7 @@
         },
         {
           "value": "entra_ds",
-          "label": "Entra Domain Services",
-          "supported": false,
-          "reason": "Domain join for session hosts comes in a later phase."
+          "label": "Entra Domain Services"
         },
         {
           "value": "ad_ds",
@@ -684,7 +682,7 @@
       "question": "AD DS domain FQDN (for example corp.contoso.com)?",
       "help": "Required when identity_model is ad_ds.",
       "when": {
-        "identity_model": ["ad_ds"]
+        "identity_model": ["ad_ds", "entra_ds"]
       },
       "default": null,
       "tfvars": [
@@ -703,7 +701,7 @@
       "question": "AD DS organizational unit distinguished name (optional)?",
       "help": "Leave blank to join the default Computers container.",
       "when": {
-        "identity_model": ["ad_ds"]
+        "identity_model": ["ad_ds", "entra_ds"]
       },
       "default": null,
       "tfvars": [
@@ -722,7 +720,7 @@
       "question": "AD DS domain-join account username?",
       "help": "Account delegated to join session hosts to the domain.",
       "when": {
-        "identity_model": ["ad_ds"]
+        "identity_model": ["ad_ds", "entra_ds"]
       },
       "default": null,
       "tfvars": [
@@ -741,7 +739,7 @@
       "question": "Versioned Key Vault secret URI for the domain-join password?",
       "help": "Versioned Key Vault secret URI passed to JsonADDomainExtension via protected_settings_from_key_vault so no secret enters state.",
       "when": {
-        "identity_model": ["ad_ds"]
+        "identity_model": ["ad_ds", "entra_ds"]
       },
       "default": null,
       "tfvars": [
@@ -877,6 +875,46 @@
           "stage": "platform",
           "path": "existing_workspace_id",
           "omit_empty": true
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "enable_avd_private_link",
+      "phase": "configure",
+      "type": "bool",
+      "question": "Enable AVD Private Link (privatelink.wvd.microsoft.com)?",
+      "help": "Creates private endpoints for the host pool and workspace and disables public network access.",
+      "default": false,
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "enable_avd_private_link"
+        }
+      ],
+      "ask": "advanced"
+    },
+    {
+      "id": "app_group_type",
+      "phase": "configure",
+      "type": "enum",
+      "question": "Publish a full Desktop or RemoteApp applications?",
+      "help": "Desktop publishes a full Windows session; RemoteApp publishes individual apps.",
+      "choices": [
+        {
+          "value": "Desktop",
+          "label": "Full Desktop"
+        },
+        {
+          "value": "RemoteApp",
+          "label": "RemoteApp"
+        }
+      ],
+      "default": "Desktop",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "app_group_type"
         }
       ],
       "ask": "advanced"

@@ -42,12 +42,12 @@ variable "share_quota_gb" {
 }
 
 variable "identity_model" {
-  description = "Directory join model: entra_only (Entra Kerberos, default) or ad_ds (AD DS SMB). Overridden when identity_source is set explicitly."
+  description = "Directory join model: entra_only (Entra Kerberos, default), ad_ds (AD DS SMB), or entra_ds (Entra Domain Services). Overridden when identity_source is set explicitly."
   type        = string
   default     = "entra_only"
   validation {
-    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
-    error_message = "identity_model must be entra_only or ad_ds."
+    condition     = contains(["entra_only", "ad_ds", "entra_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only, ad_ds or entra_ds."
   }
 }
 

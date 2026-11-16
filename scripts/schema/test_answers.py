@@ -63,7 +63,9 @@ class AnswersTest(unittest.TestCase):
             self.resolve({"user_groups": [USERS], "vm_szie": "Standard_D2s_v5"})
 
     def test_unsupported_choice_says_why(self):
-        with self.assertRaisesRegex(answers.AnswerError, "later phase"):
+        self.schema["parameters"][1]["choices"][1]["supported"] = False
+        self.schema["parameters"][1]["choices"][1]["reason"] = "Disabled in fixture."
+        with self.assertRaisesRegex(answers.AnswerError, "Disabled in fixture"):
             self.resolve({"user_groups": [USERS], "identity_model": "entra_ds"})
 
     def test_prefix_rules_match_terraform(self):

@@ -22,12 +22,12 @@ resource "azurerm_virtual_desktop_host_pool" "this" {
   type                             = var.host_pool_type
   load_balancer_type               = var.host_pool_type == "Personal" ? "Persistent" : "BreadthFirst"
   personal_desktop_assignment_type = var.host_pool_type == "Personal" ? var.personal_assignment_type : null
-  preferred_app_group_type         = "Desktop"
+  preferred_app_group_type         = var.app_group_type == "RemoteApp" ? "RailApplications" : "Desktop"
   maximum_sessions_allowed         = var.host_pool_type == "Personal" ? null : var.max_sessions_per_host
   custom_rdp_properties            = local.effective_rdp_properties
   validate_environment             = var.validation_environment
   start_vm_on_connect              = var.start_vm_on_connect
-  public_network_access            = "Enabled"
+  public_network_access            = var.enable_private_link ? "Disabled" : "Enabled"
   tags                             = var.tags
 
   scheduled_agent_updates {
@@ -65,23 +65,37 @@ resource "azapi_update_resource" "registration" {
 
 resource "azurerm_virtual_desktop_application_group" "desktop" {
   name                         = var.app_group_name
-  friendly_name                = "Desktop"
-  default_desktop_display_name = var.desktop_display_name
+  friendly_name                = var.app_group_type
+  default_desktop_display_name = var.app_group_type == "Desktop" ? var.desktop_display_name : null
   location                     = var.location
   resource_group_name          = var.resource_group_name
-  type                         = "Desktop"
+  type                         = var.app_group_type
   host_pool_id                 = azurerm_virtual_desktop_host_pool.this.id
   tags                         = var.tags
 }
 
-# The feed stays public so users can subscribe from any network.
+resource "azurerm_virtual_desktop_application" "this" {
+  for_each                     = var.app_group_type == "RemoteApp" ? var.remote_apps : {}
+  name                         = each.key
+  application_group_id         = azurerm_virtual_desktop_application_group.desktop.id
+  friendly_name                = coalesce(each.value.friendly_name, each.key)
+  description                  = each.value.description
+  path                         = each.value.path
+  command_line_argument_policy = each.value.command_line_argument_policy
+  command_line_arguments       = each.value.command_line_arguments
+  show_in_portal               = each.value.show_in_portal
+  icon_path                    = coalesce(each.value.icon_path, each.value.path)
+  icon_index                   = each.value.icon_index
+}
+
+# The feed stays public unless Private Link is enabled.
 resource "azurerm_virtual_desktop_workspace" "this" {
   count                         = local.use_existing_workspace ? 0 : 1
   name                          = var.workspace_name
   friendly_name                 = var.workspace_friendly_name
   location                      = var.location
   resource_group_name           = var.resource_group_name
-  public_network_access_enabled = true
+  public_network_access_enabled = !var.enable_private_link
   tags                          = var.tags
 
   lifecycle {
@@ -89,6 +103,55 @@ resource "azurerm_virtual_desktop_workspace" "this" {
       condition     = var.workspace_name != null
       error_message = "workspace_name is required when existing_workspace_id is null."
     }
+  }
+}
+
+resource "azurerm_private_endpoint" "host_pool" {
+  count               = var.enable_private_link ? 1 : 0
+  name                = "pe-${var.host_pool_name}-connection"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  subnet_id           = var.private_endpoint_subnet_id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "connection"
+    private_connection_resource_id = azurerm_virtual_desktop_host_pool.this.id
+    subresource_names              = ["connection"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "default"
+    private_dns_zone_ids = [var.private_dns_zone_id]
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.private_endpoint_subnet_id != null && var.private_dns_zone_id != null
+      error_message = "enable_private_link requires private_endpoint_subnet_id and private_dns_zone_id."
+    }
+  }
+}
+
+resource "azurerm_private_endpoint" "workspace" {
+  count               = var.enable_private_link && !local.use_existing_workspace ? 1 : 0
+  name                = "pe-${var.workspace_name}-feed"
+  location            = var.location
+  resource_group_name = var.resource_group_name
+  subnet_id           = var.private_endpoint_subnet_id
+  tags                = var.tags
+
+  private_service_connection {
+    name                           = "feed"
+    private_connection_resource_id = azurerm_virtual_desktop_workspace.this[0].id
+    subresource_names              = ["feed"]
+    is_manual_connection           = false
+  }
+
+  private_dns_zone_group {
+    name                 = "default"
+    private_dns_zone_ids = [var.private_dns_zone_id]
   }
 }
 

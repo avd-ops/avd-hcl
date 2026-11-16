@@ -77,6 +77,12 @@ variable "create_private_dns_zones" {
   default     = true
 }
 
+variable "enable_avd_private_link" {
+  description = "Include privatelink.wvd.microsoft.com when create_private_dns_zones is true."
+  type        = bool
+  default     = false
+}
+
 variable "existing_private_dns_zone_ids" {
   description = "Existing privatelink zone IDs keyed by file, vault and blob. Used when create_private_dns_zones is false."
   type        = map(string)

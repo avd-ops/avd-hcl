@@ -214,3 +214,20 @@ run "ad_ds_requires_domain_join_inputs" {
 
   expect_failures = [azurerm_virtual_machine_extension.ad_join]
 }
+
+run "entra_ds_uses_ad_join_extension" {
+  command = plan
+
+  variables {
+    host_count                      = 1
+    identity_model                  = "entra_ds"
+    domain_name                     = "aadds.contoso.com"
+    domain_join_username            = "avdjoin@contoso.com"
+    domain_join_password_secret_url = "https://kv-test.vault.azure.net/secrets/domain-join-password/00000000000000000000000000000001"
+  }
+
+  assert {
+    condition     = length(azurerm_virtual_machine_extension.entra_join) == 0 && length(azurerm_virtual_machine_extension.ad_join) == 1
+    error_message = "entra_ds uses JsonADDomainExtension to join the Entra Domain Services domain."
+  }
+}

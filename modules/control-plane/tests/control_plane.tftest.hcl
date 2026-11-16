@@ -143,3 +143,41 @@ run "existing_workspace_and_ad_ds_rdp_properties" {
     error_message = "Diagnostic settings cover the new host pool, app group and scaling plan, not the existing workspace."
   }
 }
+
+run "remote_app_and_private_link" {
+  command = plan
+
+  variables {
+    identity_model             = "entra_ds"
+    app_group_type             = "RemoteApp"
+    enable_private_link        = true
+    private_endpoint_subnet_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet-test/subnets/snet-pe"
+    private_dns_zone_id        = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/privateDnsZones/privatelink.wvd.microsoft.com"
+    remote_apps = {
+      notepad = {
+        friendly_name = "Notepad"
+        path          = "C:\\Windows\\System32\\notepad.exe"
+      }
+    }
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_host_pool.this.preferred_app_group_type == "RailApplications" && azurerm_virtual_desktop_application_group.desktop.type == "RemoteApp"
+    error_message = "RemoteApp mode sets RailApplications on the host pool and RemoteApp on the app group."
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_application.this["notepad"].path == "C:\\Windows\\System32\\notepad.exe"
+    error_message = "RemoteApp applications are published to the application group."
+  }
+
+  assert {
+    condition     = azurerm_virtual_desktop_host_pool.this.public_network_access == "Disabled" && !azurerm_virtual_desktop_workspace.this[0].public_network_access_enabled && length(azurerm_private_endpoint.host_pool) == 1 && length(azurerm_private_endpoint.workspace) == 1
+    error_message = "AVD Private Link disables public access and creates connection and feed private endpoints."
+  }
+
+  assert {
+    condition     = !strcontains(azurerm_virtual_desktop_host_pool.this.custom_rdp_properties, "targetisaadjoined:i:1")
+    error_message = "entra_ds omits targetisaadjoined:i:1 from default RDP properties."
+  }
+}

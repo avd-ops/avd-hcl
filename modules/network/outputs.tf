@@ -19,7 +19,7 @@ output "subnet_ids" {
 }
 
 output "private_dns_zone_ids" {
-  description = "privatelink zone IDs keyed by file, vault and blob."
+  description = "privatelink zone IDs keyed by file, vault, blob (and avd when enable_avd_private_link is true)."
   value = var.create_private_dns_zones ? {
     for k, z in azurerm_private_dns_zone.this : k => z.id
   } : var.existing_private_dns_zone_ids
