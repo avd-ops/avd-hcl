@@ -49,6 +49,13 @@ esac
 name="${AVD_NAME:-avd-$short}"
 [ "${#name}" -le 13 ] || { echo "$name is too long for the pipeline's names; set AVD_NAME (2 to 13 characters)" >&2; exit 64; }
 config="${XDG_CONFIG_HOME:-$HOME/.config}/avd-hcl/$env_name.json"
+az_cloud="$(az cloud show --query name -o tsv 2>/dev/null || echo AzureCloud)"
+cloud="commercial"
+backend_env="public"
+if [ "$az_cloud" = AzureUSGovernment ]; then
+  cloud="usgov"
+  backend_env="usgovernment"
+fi
 
 # Every environment shares the 00-pipeline folder, so each keeps its own Terraform working
 # directory, variables and backend: one environment's run never sees another's state.
@@ -106,8 +113,8 @@ write_backend() {
     printf '# Written by scripts/pipeline/bootstrap.sh for %s. Git-ignored.\nterraform {\n  backend "local" {\n    path = ".state/%s.tfstate"\n  }\n}\n' \
       "$env_name" "$env_name" > "$stage/backend_override.tf"
   else
-    printf '# Written by scripts/pipeline/bootstrap.sh for %s. Git-ignored.\nterraform {\n  backend "azurerm" {\n    resource_group_name  = "%s"\n    storage_account_name = "%s"\n    container_name       = "tfstate"\n    key                  = "avd/%s/pipeline.tfstate"\n    use_azuread_auth     = true\n  }\n}\n' \
-      "$env_name" "$rg" "$sa" "$env_name" > "$stage/backend_override.tf"
+    printf '# Written by scripts/pipeline/bootstrap.sh for %s. Git-ignored.\nterraform {\n  backend "azurerm" {\n    resource_group_name  = "%s"\n    storage_account_name = "%s"\n    container_name       = "tfstate"\n    key                  = "avd/%s/pipeline.tfstate"\n    environment          = "%s"\n    use_azuread_auth     = true\n  }\n}\n' \
+      "$env_name" "$rg" "$sa" "$env_name" "$backend_env" > "$stage/backend_override.tf"
   fi
 }
 
@@ -187,8 +194,8 @@ if [ "$mode" = --adopt ]; then
   say "Moving 01-platform state into the pipeline's storage"
   echo "Don't run this while a plan or apply is running for $env_name."
   umask 077
-  printf 'resource_group_name  = "%s"\nstorage_account_name = "%s"\ncontainer_name       = "tfstate"\nkey                  = "avd/%s/platform.tfstate"\nuse_azuread_auth     = true\n' \
-    "$(stored storage_resource_group)" "$(stored storage_account)" "$env_name" > "$platform/pipeline.backend.hcl"
+  printf 'resource_group_name  = "%s"\nstorage_account_name = "%s"\ncontainer_name       = "tfstate"\nkey                  = "avd/%s/platform.tfstate"\nenvironment          = "%s"\nuse_azuread_auth     = true\n' \
+    "$(stored storage_resource_group)" "$(stored storage_account)" "$env_name" "$backend_env" > "$platform/pipeline.backend.hcl"
   retry "state" terraform -chdir="$platform" init -input=false -migrate-state -force-copy -backend-config=pipeline.backend.hcl >/dev/null \
     || { echo "Couldn't move the state; it's unchanged. Run $0 --adopt again in a few minutes." >&2; exit 1; }
   echo "01-platform: state is now in avd/$env_name/platform.tfstate"
@@ -225,9 +232,9 @@ umask 077
 jq -n \
   --arg tenant "$(az account show --query tenantId -o tsv)" \
   --arg sub "$(az account show --query id -o tsv)" \
-  --arg name "$name" --arg location "$location" --arg env "$env_name" \
+  --arg name "$name" --arg location "$location" --arg env "$env_name" --arg cloud "$cloud" \
   --arg owner "$owner" --arg repo "$repo" --arg reviewers "$reviewers" --argjson enterprise "$enterprise" \
-  '{tenant_id: $tenant, subscription_id: $sub, name: $name, location: $location, environment: $env,
+  '{tenant_id: $tenant, subscription_id: $sub, name: $name, location: $location, environment: $env, cloud: $cloud,
     github: {owner: $owner, repository: $repo, enterprise: $enterprise,
              reviewers: ($reviewers | split(",") | map(gsub("^\\s+|\\s+$"; "")))}}' > "$vars"
 echo "Wrote 00-pipeline/$(basename "$vars") (git-ignored)"

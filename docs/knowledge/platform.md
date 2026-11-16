@@ -179,3 +179,9 @@ import {
   hosts via `JsonADDomainExtension` and sets FSLogix `directory_type = "AADDS"`.
 - **Verify & Handover (`scripts/verify/check.py`, `scripts/handover/runbook.py`):** Read-only
   post-deploy health checks via `az` CLI and markdown runbook generation from Terraform outputs.
+- **Azure Government (`cloud = "usgov"`):** Supported across `modules/network`,
+  `modules/hub-network`, `modules/fslogix-storage`, `modules/power-platform-policy`, all
+  `environments/example/` roots (`environment = "usgovernment"` on `azurerm`/`azuread`/`azapi`
+  providers), `packer/avd-win11`, `schema/parameters.json`, and `scripts/pipeline/` /
+  `scripts/readiness/` (`AzureUSGovernment`). Verified offline with mocked providers and unit
+  tests; not yet tested against a live Azure Government subscription.

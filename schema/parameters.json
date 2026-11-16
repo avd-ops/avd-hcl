@@ -918,6 +918,35 @@
         }
       ],
       "ask": "advanced"
+    },
+    {
+      "id": "cloud",
+      "phase": "discover",
+      "type": "enum",
+      "question": "Which Azure cloud are you deploying into?",
+      "help": "Select commercial for AzureCloud or usgov for Azure US Government (AzureUSGovernment).",
+      "choices": [
+        {
+          "value": "commercial",
+          "label": "Azure Commercial (AzureCloud)"
+        },
+        {
+          "value": "usgov",
+          "label": "Azure US Government (AzureUSGovernment)"
+        }
+      ],
+      "default": "commercial",
+      "tfvars": [
+        {
+          "stage": "platform",
+          "path": "cloud"
+        },
+        {
+          "stage": "images",
+          "path": "cloud"
+        }
+      ],
+      "ask": "advanced"
     }
   ]
 }

@@ -16,6 +16,11 @@ PEERING = "https://learn.microsoft.com/azure/virtual-network/virtual-network-pee
 HUB_ROLES = {"Owner", "Contributor", "Network Contributor"}
 # The zones modules/network creates for the profile share's and Key Vault's private endpoints.
 KIT_ZONES = {"privatelink.file.core.windows.net", "privatelink.blob.core.windows.net", "privatelink.vaultcore.azure.net"}
+KIT_ZONES_USGOV = {
+    "privatelink.file.core.usgovcloudapi.net",
+    "privatelink.blob.core.usgovcloudapi.net",
+    "privatelink.vaultcore.usgovcloudapi.net",
+}
 
 
 def kit_groups(ctx) -> set:
@@ -112,7 +117,8 @@ def private_dns(ctx, c):
     if zones is None:
         return c.skip("couldn't list private DNS zones")
     kit = kit_groups(ctx)
-    found = sorted({f"{z['name']} ({ctx.name('rg', z.get('rg') or '')})" for z in zones if z.get("name") in KIT_ZONES
+    expected = KIT_ZONES_USGOV if ctx.cloud == "AzureUSGovernment" else KIT_ZONES
+    found = sorted({f"{z['name']} ({ctx.name('rg', z.get('rg') or '')})" for z in zones if z.get("name") in expected
                     and (z.get("rg") or "").lower() not in kit})
     if found:
         return c.warn("privatelink zones already exist elsewhere: " + ", ".join(found),

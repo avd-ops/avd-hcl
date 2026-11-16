@@ -83,6 +83,7 @@ init_stage() {
     -backend-config="storage_account_name=$TFSTATE_STORAGE_ACCOUNT" \
     -backend-config="container_name=tfstate" \
     -backend-config="key=avd/$AVD_ENV/$STAGE.tfstate" \
+    -backend-config="environment=${ARM_ENVIRONMENT:-public}" \
     -backend-config="use_azuread_auth=true" 2>&1 | redact | tail -n 3
 }
 

@@ -28,6 +28,16 @@ variable "environment" {
   }
 }
 
+variable "cloud" {
+  description = "Target cloud environment profile (commercial or usgov)."
+  type        = string
+  default     = "commercial"
+  validation {
+    condition     = contains(["commercial", "usgov"], var.cloud)
+    error_message = "cloud must be commercial or usgov."
+  }
+}
+
 variable "tags" {
   description = "Extra tags on every resource."
   type        = map(string)

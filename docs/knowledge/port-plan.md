@@ -156,4 +156,5 @@ sandbox run.
    WDOT event-log verification (landing zone lesson 0031).
 4. **Chat front door.** The assistant over the same schema and pipeline, handover runbook.
 5. **Later.** AD DS and Entra DS join, hardening (private endpoints, self-hosted runner), session
-   host configuration opt-in, RemoteApp groups, Azure Government.
+   host configuration opt-in, RemoteApp groups, Azure Government (code built and offline-tested;
+   live Azure Government run pending).

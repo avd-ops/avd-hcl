@@ -12,5 +12,5 @@ output "storage_account_name" {
 
 output "profile_share_unc" {
   description = "UNC path for the FSLogix VHDLocations setting."
-  value       = "\\\\${local.storage_account_name}.file.core.windows.net\\${local.effective_share_name}"
+  value       = "\\\\${local.storage_account_name}.file.core.${var.cloud == "usgov" ? "usgovcloudapi.net" : "windows.net"}\\${local.effective_share_name}"
 }

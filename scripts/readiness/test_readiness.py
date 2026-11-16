@@ -171,8 +171,19 @@ class ReadinessTest(unittest.TestCase):
         _, results = run(create_nat_gateway=False)
         self.assertEqual(by_id(results, "net.egress")[0].status, "fail")
 
+    def test_usgov_cloud_passes(self):
+        ctx, results = run(FakeAz({"cloud show": "AzureUSGovernment"}))
+        self.assertEqual(by_id(results, "op.cloud")[0].status, "pass")
+        self.assertEqual(ctx.arm_url, "https://management.usgovcloudapi.net")
+        self.assertEqual(ctx.graph_url, "https://graph.microsoft.us/v1.0")
+
+    def test_usgov_private_dns_checks_gov_zones(self):
+        zones = [{"name": "privatelink.file.core.usgovcloudapi.net", "rg": "rg-dns"}]
+        _, results = run(FakeAz({"cloud show": "AzureUSGovernment", "network private-dns zone list": zones}))
+        self.assertEqual(by_id(results, "net.private_dns")[0].status, "warn")
+
     def test_unsupported_cloud_stops_the_rest(self):
-        _, results = run(FakeAz({"cloud show": "AzureUSGovernment"}))
+        _, results = run(FakeAz({"cloud show": "AzureChinaCloud"}))
         self.assertEqual(by_id(results, "op.cloud")[0].status, "fail")
         self.assertTrue(all(r.status == "skipped" for r in results if r.domain == "avd"))
 

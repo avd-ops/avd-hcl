@@ -18,6 +18,10 @@ from typing import Callable, Dict, List, Optional
 
 ARM = "https://management.azure.com"
 GRAPH = "https://graph.microsoft.com/v1.0"
+CLOUD_ENDPOINTS = {
+    "AzureCloud": (ARM, GRAPH),
+    "AzureUSGovernment": ("https://management.usgovcloudapi.net", "https://graph.microsoft.us/v1.0"),
+}
 
 # az subcommands whose last word is one of these only read.
 READ_VERBS = {"show", "list"}
@@ -111,6 +115,14 @@ class Ctx:
 
     def get(self, url: str):
         return self.az(["rest", "--method", "get", "--url", url])
+
+    @property
+    def arm_url(self) -> str:
+        return CLOUD_ENDPOINTS.get(self.cloud, (ARM, GRAPH))[0]
+
+    @property
+    def graph_url(self) -> str:
+        return CLOUD_ENDPOINTS.get(self.cloud, (ARM, GRAPH))[1]
 
     def cached(self, key, fn: Callable):
         if key not in self._cache:

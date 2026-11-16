@@ -124,3 +124,17 @@ run "entra_ds_identity_model_uses_aadds" {
     error_message = "entra_ds identity_model configures Azure Files for AADDS."
   }
 }
+
+run "usgov_uses_gov_file_endpoint_in_unc" {
+  command = plan
+
+  variables {
+    cloud    = "usgov"
+    location = "usgovvirginia"
+  }
+
+  assert {
+    condition     = output.profile_share_unc == "\\\\sttestprofiles.file.core.usgovcloudapi.net\\profiles"
+    error_message = "usgov cloud must use file.core.usgovcloudapi.net in profile_share_unc."
+  }
+}

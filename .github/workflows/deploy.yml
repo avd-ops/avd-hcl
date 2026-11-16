@@ -31,6 +31,14 @@ on:
           - images
           - preflight
         default: platform
+      cloud:
+        description: "Target Azure cloud"
+        required: true
+        type: choice
+        options:
+          - azurecloud
+          - azureusgovernment
+        default: azurecloud
       apply:
         description: "Apply after the plan? A reviewer still has to approve it."
         required: true
@@ -52,6 +60,7 @@ defaults:
 env:
   TF_IN_AUTOMATION: "true"
   ARM_USE_OIDC: "true"
+  ARM_ENVIRONMENT: ${{ inputs.cloud == 'azureusgovernment' && 'usgovernment' || 'public' }}
   STAGE: ${{ inputs.stage }}
   AVD_ENV: ${{ inputs.environment }}
 
@@ -86,6 +95,7 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          environment: ${{ inputs.cloud }}
       - name: Plan
         id: plan
         run: ./scripts/pipeline/stage.sh plan
@@ -120,5 +130,6 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          environment: ${{ inputs.cloud }}
       - name: Apply
         run: ./scripts/pipeline/stage.sh apply

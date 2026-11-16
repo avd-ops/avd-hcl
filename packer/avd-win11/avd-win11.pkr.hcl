@@ -6,9 +6,10 @@ locals {
 }
 
 source "azure-arm" "avd" {
-  subscription_id    = var.subscription_id
-  tenant_id          = var.tenant_id
-  use_azure_cli_auth = var.use_azure_cli_auth
+  subscription_id        = var.subscription_id
+  tenant_id              = var.tenant_id
+  cloud_environment_name = var.cloud == "usgov" ? "USGovernment" : "Public"
+  use_azure_cli_auth     = var.use_azure_cli_auth
 
   build_resource_group_name = var.build_resource_group
   vm_size                   = var.vm_size
