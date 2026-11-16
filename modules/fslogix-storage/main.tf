@@ -7,12 +7,14 @@
 # Entra app registration once, before Entra Kerberos tickets are issued for the share.
 
 locals {
-  use_existing_storage      = var.existing_storage_account_id != null
-  use_existing_share        = local.use_existing_storage && var.existing_share_name != null
-  effective_identity_source = var.identity_source != null ? var.identity_source : (var.identity_model == "ad_ds" ? "AD" : "AADKERB")
-  storage_account_id        = local.use_existing_storage ? var.existing_storage_account_id : azurerm_storage_account.profiles[0].id
-  storage_account_name      = local.use_existing_storage ? element(split("/", var.existing_storage_account_id), length(split("/", var.existing_storage_account_id)) - 1) : azurerm_storage_account.profiles[0].name
-  effective_share_name      = local.use_existing_share ? var.existing_share_name : azurerm_storage_share.profiles[0].name
+  use_existing_storage = var.existing_storage_account_id != null
+  use_existing_share   = local.use_existing_storage && var.existing_share_name != null
+  effective_identity_source = var.identity_source != null ? var.identity_source : (
+    var.identity_model == "ad_ds" ? "AD" : (var.identity_model == "entra_ds" ? "AADDS" : "AADKERB")
+  )
+  storage_account_id   = local.use_existing_storage ? var.existing_storage_account_id : azurerm_storage_account.profiles[0].id
+  storage_account_name = local.use_existing_storage ? element(split("/", var.existing_storage_account_id), length(split("/", var.existing_storage_account_id)) - 1) : azurerm_storage_account.profiles[0].name
+  effective_share_name = local.use_existing_share ? var.existing_share_name : azurerm_storage_share.profiles[0].name
 }
 
 resource "azurerm_storage_account" "profiles" {

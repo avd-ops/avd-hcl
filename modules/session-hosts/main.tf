@@ -173,7 +173,7 @@ resource "azurerm_virtual_machine_extension" "entra_join" {
 }
 
 resource "azurerm_virtual_machine_extension" "ad_join" {
-  for_each                   = var.identity_model == "ad_ds" ? local.hosts : {}
+  for_each                   = contains(["ad_ds", "entra_ds"], var.identity_model) ? local.hosts : {}
   name                       = "JsonADDomainExtension"
   virtual_machine_id         = azapi_resource.host[each.key].id
   publisher                  = "Microsoft.Compute"
@@ -182,7 +182,7 @@ resource "azurerm_virtual_machine_extension" "ad_join" {
   auto_upgrade_minor_version = true
   settings = jsonencode({
     Name    = var.domain_name
-    OUPath  = coalesce(var.domain_ou_path, "")
+    OUPath  = var.domain_ou_path != null ? var.domain_ou_path : ""
     User    = var.domain_join_username
     Restart = "true"
     Options = "3"

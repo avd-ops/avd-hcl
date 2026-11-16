@@ -143,3 +143,16 @@ run "existing_vnet_requires_both_subnets" {
 
   expect_failures = [var.existing_vnet_id]
 }
+
+run "avd_private_link_adds_wvd_dns_zone" {
+  command = plan
+
+  variables {
+    enable_avd_private_link = true
+  }
+
+  assert {
+    condition     = length(azurerm_private_dns_zone.this) == 4 && azurerm_private_dns_zone.this["avd"].name == "privatelink.wvd.microsoft.com"
+    error_message = "Enabling AVD Private Link adds the privatelink.wvd.microsoft.com DNS zone."
+  }
+}

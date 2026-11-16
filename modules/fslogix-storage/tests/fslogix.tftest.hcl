@@ -111,3 +111,16 @@ run "existing_storage_account_and_share_are_reused" {
     error_message = "Existing storage account and share flow through outputs."
   }
 }
+
+run "entra_ds_identity_model_uses_aadds" {
+  command = plan
+
+  variables {
+    identity_model = "entra_ds"
+  }
+
+  assert {
+    condition     = one(azurerm_storage_account.profiles[0].azure_files_authentication).directory_type == "AADDS"
+    error_message = "entra_ds identity_model configures Azure Files for AADDS."
+  }
+}

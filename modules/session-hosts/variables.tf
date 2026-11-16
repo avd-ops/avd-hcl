@@ -110,12 +110,12 @@ variable "subnet_id" {
 }
 
 variable "identity_model" {
-  description = "Directory join model for session hosts: entra_only (Entra ID joined, default) or ad_ds (Active Directory Domain Services via JsonADDomainExtension)."
+  description = "Directory join model for session hosts: entra_only (Entra ID joined, default), ad_ds (Active Directory Domain Services), or entra_ds (Entra Domain Services) via JsonADDomainExtension."
   type        = string
   default     = "entra_only"
   validation {
-    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
-    error_message = "identity_model must be entra_only or ad_ds."
+    condition     = contains(["entra_only", "ad_ds", "entra_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only, ad_ds or entra_ds."
   }
 }
 

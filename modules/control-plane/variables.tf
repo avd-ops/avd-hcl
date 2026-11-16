@@ -47,14 +47,39 @@ variable "personal_assignment_type" {
 }
 
 variable "app_group_name" {
-  description = "Desktop application group name."
+  description = "Application group name."
   type        = string
 }
 
-variable "desktop_display_name" {
-  description = "Name users see on the desktop tile."
+variable "app_group_type" {
+  description = "Application group type: Desktop (default) or RemoteApp."
   type        = string
   default     = "Desktop"
+  validation {
+    condition     = contains(["Desktop", "RemoteApp"], var.app_group_type)
+    error_message = "app_group_type must be Desktop or RemoteApp."
+  }
+}
+
+variable "desktop_display_name" {
+  description = "Name users see on the desktop tile when app_group_type is Desktop."
+  type        = string
+  default     = "Desktop"
+}
+
+variable "remote_apps" {
+  description = "Map of RemoteApp applications to publish when app_group_type is RemoteApp."
+  type = map(object({
+    friendly_name                = optional(string)
+    description                  = optional(string)
+    path                         = string
+    command_line_argument_policy = optional(string, "DoNotAllow")
+    command_line_arguments       = optional(string)
+    show_in_portal               = optional(bool, true)
+    icon_path                    = optional(string)
+    icon_index                   = optional(number, 0)
+  }))
+  default = {}
 }
 
 variable "workspace_name" {
@@ -91,13 +116,31 @@ variable "max_sessions_per_host" {
 }
 
 variable "identity_model" {
-  description = "Directory join model for the host pool's session hosts: entra_only (default) or ad_ds. Controls default RDP properties when rdp_properties is null."
+  description = "Directory join model for the host pool's session hosts: entra_only (default), ad_ds, or entra_ds. Controls default RDP properties when rdp_properties is null."
   type        = string
   default     = "entra_only"
   validation {
-    condition     = contains(["entra_only", "ad_ds"], var.identity_model)
-    error_message = "identity_model must be entra_only or ad_ds."
+    condition     = contains(["entra_only", "ad_ds", "entra_ds"], var.identity_model)
+    error_message = "identity_model must be entra_only, ad_ds or entra_ds."
   }
+}
+
+variable "enable_private_link" {
+  description = "Create AVD Private Link endpoints for the host pool (and workspace when created) and disable public network access."
+  type        = bool
+  default     = false
+}
+
+variable "private_endpoint_subnet_id" {
+  description = "Subnet ID for AVD Private Link endpoints. Required when enable_private_link is true."
+  type        = string
+  default     = null
+}
+
+variable "private_dns_zone_id" {
+  description = "privatelink.wvd.microsoft.com Private DNS zone ID. Required when enable_private_link is true."
+  type        = string
+  default     = null
 }
 
 variable "rdp_properties" {

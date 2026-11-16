@@ -44,7 +44,8 @@ class SchemaTest(unittest.TestCase):
 
     def test_unsupported_choice_needs_reason(self):
         choice = self.param("identity_model")["choices"][1]
-        del choice["reason"]
+        choice["supported"] = False
+        choice.pop("reason", None)
         self.assertTrue(any("needs a reason" in e for e in check.check(self.schema)))
 
     def test_form_limit(self):

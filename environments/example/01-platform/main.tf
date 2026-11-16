@@ -72,6 +72,7 @@ module "network" {
   create_nat_gateway                   = local.effective_create_nat_gateway
   egress_firewall_ip                   = local.effective_egress_firewall_ip
   create_private_dns_zones             = var.create_private_dns_zones
+  enable_avd_private_link              = var.enable_avd_private_link
   existing_private_dns_zone_ids        = var.existing_private_dns_zone_ids
   existing_vnet_id                     = var.existing_vnet_id
   existing_session_hosts_subnet_id     = var.existing_session_hosts_subnet_id
@@ -155,9 +156,14 @@ module "control_plane" {
   host_pool_type             = var.host_pool_type
   personal_assignment_type   = var.personal_assignment_type
   app_group_name             = local.names.app_group
+  app_group_type             = var.app_group_type
+  remote_apps                = var.remote_apps
   workspace_name             = local.names.workspace
   workspace_friendly_name    = var.workspace_friendly_name
   existing_workspace_id      = var.existing_workspace_id
+  enable_private_link        = var.enable_avd_private_link
+  private_endpoint_subnet_id = module.network.subnet_ids["private_endpoints"]
+  private_dns_zone_id        = try(module.network.private_dns_zone_ids["avd"], null)
   scaling_plan_name          = local.names.scaling_plan
   max_sessions_per_host      = var.max_sessions_per_host
   time_zone                  = var.time_zone
