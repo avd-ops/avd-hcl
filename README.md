@@ -17,6 +17,15 @@ has run against Azure yet.
 The plan is [docs/knowledge/port-plan.md](docs/knowledge/port-plan.md); what is built is
 [docs/knowledge/platform.md](docs/knowledge/platform.md).
 
+## How it connects
+
+| Direction | Repo | Relationship |
+|---|---|---|
+| Front door | [avd-ops](https://github.com/avd-ops/avd-ops#readme) | Overview, [repo page](https://avd-ops.dev/docs/repos/avd-hcl.html), and platform decisions |
+| Bicep sibling | [avd-landing-zone](https://github.com/avd-ops/avd-landing-zone#readme) | Inspiration for estate patterns and real-run lessons (stays fully separate) |
+| Origin | [nerdio-hcl](https://github.com/nickprignano/nerdio-hcl#readme) | Eight-phase guided setup and keyless pipeline pattern |
+| Standards | [avd-assess](https://github.com/avd-ops/avd-assess#readme) | Target posture and pinned Microsoft Learn claims |
+
 ## Layout
 
 | Path | What |
