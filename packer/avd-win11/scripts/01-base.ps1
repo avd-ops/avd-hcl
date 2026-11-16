@@ -31,12 +31,44 @@ Set-ItemProperty -Path $officePath -Name hideupdatenotifications -Value 1 -Type 
 Set-ItemProperty -Path $officePath -Name hideenabledisableupdates -Value 1 -Type DWord
 
 # FSLogix ships in the multi-session images; Configure-FSLogix configures the share per host pool.
+if ($env:INSTALL_EVERGREEN -eq 'True') {
+    Write-Host 'Ensuring EUCPilots Evergreen module is installed'
+    if ($null -eq (Get-Module -ListAvailable -Name Evergreen)) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force | Out-Null
+        Install-Module -Name Evergreen -Scope AllUsers -Force -AllowClobber
+    }
+    Import-Module Evergreen -ErrorAction Stop
+}
+
 if (-not (Test-Path 'C:\Program Files\FSLogix\Apps\frx.exe')) {
-    Write-Host 'FSLogix not found, installing latest'
+    Write-Host 'FSLogix not found, resolving latest via Evergreen'
+    if ($null -eq (Get-Module -ListAvailable -Name Evergreen)) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force | Out-Null
+        Install-Module -Name Evergreen -Scope AllUsers -Force -AllowClobber
+    }
+    Import-Module Evergreen -ErrorAction Stop
+    $fsl = Get-EvergreenApp -Name MicrosoftFSLogixApps | Where-Object { $_.Channel -eq 'Production' } | Select-Object -First 1
+    if ($null -eq $fsl -or [string]::IsNullOrWhiteSpace($fsl.URI)) {
+        throw 'Evergreen returned no Production download URI for MicrosoftFSLogixApps.'
+    }
     $zip = "$env:TEMP\fslogix.zip"
-    Invoke-WebRequest -Uri 'https://aka.ms/fslogix_download' -OutFile $zip
+    Invoke-WebRequest -Uri $fsl.URI -OutFile $zip
     Expand-Archive $zip -DestinationPath "$env:TEMP\fslogix" -Force
     Start-Process "$env:TEMP\fslogix\x64\Release\FSLogixAppsSetup.exe" -ArgumentList '/install /quiet /norestart' -Wait
+}
+
+if ($env:INSTALL_VCREDIST -eq 'True') {
+    Write-Host 'Installing Microsoft Visual C++ Redistributables (2022 x64) via EUCPilots VcRedist'
+    if ($null -eq (Get-Module -ListAvailable -Name VcRedist)) {
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force | Out-Null
+        Install-Module -Name VcRedist -Scope AllUsers -Force -AllowClobber
+    }
+    Import-Module VcRedist -ErrorAction Stop
+    $vcDir = "$env:TEMP\vcredist"
+    New-Item -Path $vcDir -ItemType Directory -Force | Out-Null
+    $vcList = Get-VcList -Release 2022 -Architecture x64
+    Save-VcRedist -VcList $vcList -Path $vcDir | Out-Null
+    Install-VcRedist -VcList $vcList -Path $vcDir -Silent
 }
 
 if ($env:GPU_PRESET -eq 'True') {
