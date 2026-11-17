@@ -447,3 +447,57 @@ variable "remote_apps" {
   }))
   default = {}
 }
+
+variable "host_placement" {
+  description = "Where session hosts run: azure (Azure IaaS VMs, default) or azure-local (Arc VMs on a registered Azure Local 23H2+ instance)."
+  type        = string
+  default     = "azure"
+  validation {
+    condition     = contains(["azure", "azure-local"], var.host_placement)
+    error_message = "host_placement must be azure or azure-local."
+  }
+}
+
+variable "custom_location_id" {
+  description = "Resource ID of the target Custom Location when host_placement is azure-local."
+  type        = string
+  default     = ""
+}
+
+variable "azure_local_logical_network_id" {
+  description = "Resource ID of the target Arc logical network when host_placement is azure-local."
+  type        = string
+  default     = ""
+}
+
+variable "azure_local_image_id" {
+  description = "Resource ID of the target Azure Local gallery or marketplace image when host_placement is azure-local."
+  type        = string
+  default     = ""
+}
+
+variable "local_smb_profile_path" {
+  description = "Bring-your-own on-premises SMB UNC path for FSLogix profiles when host_placement is azure-local."
+  type        = string
+  default     = ""
+}
+
+variable "azure_local_processors" {
+  description = "vCPU count per Azure Local session host VM instance."
+  type        = number
+  default     = 4
+  validation {
+    condition     = var.azure_local_processors >= 2 && floor(var.azure_local_processors) == var.azure_local_processors
+    error_message = "azure_local_processors must be a whole number of at least 2."
+  }
+}
+
+variable "azure_local_memory_mb" {
+  description = "Memory in MB per Azure Local session host VM instance."
+  type        = number
+  default     = 16384
+  validation {
+    condition     = var.azure_local_memory_mb >= 4096 && floor(var.azure_local_memory_mb) == var.azure_local_memory_mb
+    error_message = "azure_local_memory_mb must be a whole number of at least 4096."
+  }
+}

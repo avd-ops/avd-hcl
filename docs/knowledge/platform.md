@@ -185,3 +185,13 @@ import {
   providers), `packer/avd-win11`, `schema/parameters.json`, and `scripts/pipeline/` /
   `scripts/readiness/` (`AzureUSGovernment`). Verified offline with mocked providers and unit
   tests; not yet tested against a live Azure Government subscription.
+- **Azure Local (`host_placement = "azure-local"`):** `modules/azure-local-session-hosts`
+  deploys `Microsoft.HybridCompute/machines` (`kind = "HCI"`),
+  `Microsoft.AzureStackHCI/networkInterfaces`, `Microsoft.AzureStackHCI/virtualMachineInstances`
+  (`vmSize = "Custom"`), `AADLoginForWindows` (native Entra ID join only in v1), and
+  `CustomScriptExtension` (FSLogix on `local_smb_profile_path` and AVD registration token) via
+  `azapi_resource`, keeping `local_admin_password` and `registration_token` in write-only
+  `sensitive_body`. Both `01-platform` and `03-host-pool` skip Azure Files (`modules/fslogix-storage`)
+  and Azure VM session hosts (`modules/session-hosts`) when `host_placement = "azure-local"`,
+  emitting the optional `azure_local` output object. Verified offline with mocked `azapi` tests;
+  not yet tested against a live Azure Local 23H2+ instance.

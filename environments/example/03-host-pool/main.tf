@@ -44,6 +44,7 @@ module "run_secrets" {
 }
 
 module "session_hosts" {
+  count                           = var.host_placement == "azure" ? 1 : 0
   source                          = "../../../modules/session-hosts"
   location                        = var.location
   resource_group_name             = var.session_hosts_resource_group_name
@@ -76,4 +77,51 @@ module "session_hosts" {
   fslogix_profile_size_mib        = var.fslogix_profile_size_mib
   user_group_object_ids           = var.user_group_object_ids
   admin_group_object_ids          = var.admin_group_object_ids
+
+  depends_on = [terraform_data.preflight]
+}
+
+module "azure_local_session_hosts" {
+  count                    = var.host_placement == "azure-local" ? 1 : 0
+  source                   = "../../../modules/azure-local-session-hosts"
+  location                 = var.location
+  resource_group_id        = var.session_hosts_resource_group_id
+  tags                     = local.tags
+  host_count               = var.host_count
+  name_prefix              = var.vm_prefix
+  custom_location_id       = var.custom_location_id
+  logical_network_id       = var.azure_local_logical_network_id
+  image_id                 = var.azure_local_image_id
+  processors               = var.azure_local_processors
+  memory_mb                = var.azure_local_memory_mb
+  enroll_in_intune         = var.enroll_in_intune
+  local_admin_username     = var.local_admin_username
+  local_admin_password     = module.run_secrets.local_admin_password
+  registration_token       = module.run_secrets.registration_token
+  local_smb_profile_path   = var.local_smb_profile_path
+  fslogix_profile_size_mib = var.fslogix_profile_size_mib
+  host_pool_resource_id    = module.control_plane.host_pool_id
+
+  depends_on = [terraform_data.preflight]
+}
+
+resource "terraform_data" "preflight" {
+  lifecycle {
+    precondition {
+      condition     = var.host_placement != "azure" || (var.subnet_id != "" && var.profile_share_unc != "")
+      error_message = "subnet_id and profile_share_unc are required when host_placement is azure."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || var.identity_model == "entra_only"
+      error_message = "Azure Local v1 supports native Entra ID join (entra_only) only (Decision 0023)."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || (var.custom_location_id != "" && var.azure_local_logical_network_id != "" && var.azure_local_image_id != "")
+      error_message = "custom_location_id, azure_local_logical_network_id, and azure_local_image_id are required when host_placement is azure-local."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || var.local_smb_profile_path == "" || can(regex("^\\\\\\\\[^\\\\]+\\\\[^\\\\]+", var.local_smb_profile_path))
+      error_message = "local_smb_profile_path must be a UNC share path such as \\\\server\\share."
+    }
+  }
 }

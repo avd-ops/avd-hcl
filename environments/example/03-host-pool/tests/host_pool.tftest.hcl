@@ -75,3 +75,43 @@ run "remote_app_pool" {
     error_message = "RemoteApp host pool plans cleanly."
   }
 }
+
+run "azure_local_host_pool" {
+  command = plan
+
+  variables {
+    host_placement                 = "azure-local"
+    custom_location_id             = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.ExtendedLocation/customLocations/cl-test"
+    azure_local_logical_network_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/logicalNetworks/lnet-avd"
+    azure_local_image_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/galleryImages/win11-avd"
+    local_smb_profile_path         = "\\\\files01.contoso.com\\profiles"
+    subnet_id                      = ""
+    profile_share_unc              = ""
+  }
+
+  assert {
+    condition     = output.azure_local != null && output.azure_local.host_placement == "azure-local" && output.azure_local.custom_location_id == var.custom_location_id && output.azure_local.logical_network_id == var.azure_local_logical_network_id
+    error_message = "Azure Local host pool emits the azure_local output block."
+  }
+
+  assert {
+    condition     = length(output.session_host_names) == 0
+    error_message = "Zero host_count produces empty session_host_names."
+  }
+}
+
+run "azure_local_rejects_adds" {
+  command = plan
+
+  variables {
+    host_placement                 = "azure-local"
+    identity_model                 = "ad_ds"
+    custom_location_id             = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.ExtendedLocation/customLocations/cl-test"
+    azure_local_logical_network_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/logicalNetworks/lnet-avd"
+    azure_local_image_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/galleryImages/win11-avd"
+    subnet_id                      = ""
+    profile_share_unc              = ""
+  }
+
+  expect_failures = [terraform_data.preflight]
+}
