@@ -110,6 +110,7 @@ module "key_vault" {
 }
 
 module "fslogix" {
+  count                       = var.host_placement == "azure" ? 1 : 0
   source                      = "../../../modules/fslogix-storage"
   name                        = local.names.storage_account
   location                    = var.location
@@ -177,6 +178,7 @@ module "control_plane" {
 }
 
 module "session_hosts" {
+  count                           = var.host_placement == "azure" ? 1 : 0
   source                          = "../../../modules/session-hosts"
   location                        = var.location
   resource_group_name             = module.foundation.resource_group_names["session_hosts"]
@@ -205,13 +207,37 @@ module "session_hosts" {
   key_vault_id                    = module.key_vault.key_vault_id
   registration_token              = module.run_secrets.registration_token
   data_collection_rule_id         = module.monitoring.data_collection_rule_id
-  profile_share_unc               = module.fslogix.profile_share_unc
+  profile_share_unc               = module.fslogix[0].profile_share_unc
   fslogix_profile_size_mib        = var.fslogix_profile_size_mib
   user_group_object_ids           = var.user_group_object_ids
   admin_group_object_ids          = var.admin_group_object_ids
 
   # The hosts mount the profile share over its private endpoint as they register.
   depends_on = [module.fslogix, terraform_data.preflight]
+}
+
+module "azure_local_session_hosts" {
+  count                    = var.host_placement == "azure-local" ? 1 : 0
+  source                   = "../../../modules/azure-local-session-hosts"
+  location                 = var.location
+  resource_group_id        = module.foundation.resource_group_ids["session_hosts"]
+  tags                     = local.tags
+  host_count               = var.host_count
+  name_prefix              = var.vm_prefix
+  custom_location_id       = var.custom_location_id
+  logical_network_id       = var.azure_local_logical_network_id
+  image_id                 = var.azure_local_image_id
+  processors               = var.azure_local_processors
+  memory_mb                = var.azure_local_memory_mb
+  enroll_in_intune         = var.enroll_in_intune
+  local_admin_username     = var.local_admin_username
+  local_admin_password     = module.run_secrets.local_admin_password
+  registration_token       = module.run_secrets.registration_token
+  local_smb_profile_path   = var.local_smb_profile_path
+  fslogix_profile_size_mib = var.fslogix_profile_size_mib
+  host_pool_resource_id    = module.control_plane.host_pool_id
+
+  depends_on = [terraform_data.preflight]
 }
 
 # Secrets for this run, never stored: see modules/run-secrets.
@@ -228,7 +254,7 @@ module "run_secrets" {
 # Encryption at host needs a subscription feature. Read it at plan time, so a subscription without
 # it stops the plan before anything is created, instead of failing at the first VM.
 data "azapi_resource" "encryption_at_host_feature" {
-  count                  = var.encryption_at_host ? 1 : 0
+  count                  = var.host_placement == "azure" && var.encryption_at_host ? 1 : 0
   type                   = "Microsoft.Compute/features@2021-07-01"
   resource_id            = "${data.azurerm_subscription.current.id}/providers/Microsoft.Features/providers/Microsoft.Compute/features/EncryptionAtHost"
   response_export_values = ["properties.state"]
@@ -237,8 +263,20 @@ data "azapi_resource" "encryption_at_host_feature" {
 resource "terraform_data" "preflight" {
   lifecycle {
     precondition {
-      condition     = !var.encryption_at_host || try(data.azapi_resource.encryption_at_host_feature[0].output.properties.state, "") == "Registered"
+      condition     = var.host_placement != "azure" || !var.encryption_at_host || try(data.azapi_resource.encryption_at_host_feature[0].output.properties.state, "") == "Registered"
       error_message = "encryption_at_host needs the Microsoft.Compute/EncryptionAtHost feature: run `az feature register --namespace Microsoft.Compute --name EncryptionAtHost`, wait until it shows Registered, then `az provider register -n Microsoft.Compute`. Or set encryption_at_host = false."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || var.identity_model == "entra_only"
+      error_message = "Azure Local v1 supports native Entra ID join (entra_only) only (Decision 0023)."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || (var.custom_location_id != "" && var.azure_local_logical_network_id != "" && var.azure_local_image_id != "")
+      error_message = "custom_location_id, azure_local_logical_network_id, and azure_local_image_id are required when host_placement is azure-local."
+    }
+    precondition {
+      condition     = var.host_placement != "azure-local" || var.local_smb_profile_path == "" || can(regex("^\\\\\\\\[^\\\\]+\\\\[^\\\\]+", var.local_smb_profile_path))
+      error_message = "local_smb_profile_path must be a UNC share path such as \\\\server\\share."
     }
   }
 }

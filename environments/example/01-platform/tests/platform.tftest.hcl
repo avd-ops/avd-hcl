@@ -148,12 +148,12 @@ run "sandbox_defaults" {
   }
 
   assert {
-    condition     = module.fslogix.storage_account_name == "stavdtest${substr(sha1("00000000-0000-0000-0000-000000000000/northcentralus/avd-test"), 0, 6)}"
+    condition     = module.fslogix[0].storage_account_name == "stavdtest${substr(sha1("00000000-0000-0000-0000-000000000000/northcentralus/avd-test"), 0, 6)}"
     error_message = "The storage name is the compact prefix plus a stable suffix."
   }
 
   assert {
-    condition     = length(module.key_vault.key_vault_name) <= 24 && length(module.fslogix.storage_account_name) <= 24
+    condition     = length(module.key_vault.key_vault_name) <= 24 && length(module.fslogix[0].storage_account_name) <= 24
     error_message = "Globally unique names must fit Azure's 24-character limit."
   }
 
@@ -320,5 +320,32 @@ run "usgov_wires_gov_endpoints" {
   assert {
     condition     = module.network.private_dns_zone_ids != null
     error_message = "usgov network module must plan private DNS zones."
+  }
+}
+
+run "azure_local_skips_azure_files_and_emits_metadata" {
+  command = plan
+
+  variables {
+    host_placement                 = "azure-local"
+    custom_location_id             = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.ExtendedLocation/customLocations/cl-test"
+    azure_local_logical_network_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/logicalNetworks/lnet-avd"
+    azure_local_image_id           = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-hci/providers/Microsoft.AzureStackHCI/galleryImages/win11-avd"
+    local_smb_profile_path         = "\\\\files01.contoso.com\\profiles"
+  }
+
+  assert {
+    condition     = length(module.fslogix) == 0 && length(module.session_hosts) == 0 && length(module.azure_local_session_hosts) == 1
+    error_message = "Azure Local placement skips Azure Files and Azure VM session hosts."
+  }
+
+  assert {
+    condition     = output.profile_storage_account_name == "" && output.profile_share_unc == "\\\\files01.contoso.com\\profiles"
+    error_message = "Azure Local placement uses the supplied local SMB UNC path and emits empty storage account name."
+  }
+
+  assert {
+    condition     = output.azure_local != null && output.azure_local.host_placement == "azure-local" && output.azure_local.custom_location_id == var.custom_location_id && output.azure_local.logical_network_id == var.azure_local_logical_network_id
+    error_message = "Azure Local placement emits the azure_local output block."
   }
 }
