@@ -194,4 +194,6 @@ import {
   `sensitive_body`. Both `01-platform` and `03-host-pool` skip Azure Files (`modules/fslogix-storage`)
   and Azure VM session hosts (`modules/session-hosts`) when `host_placement = "azure-local"`,
   emitting the optional `azure_local` output object. Verified offline with mocked `azapi` tests;
-  not yet tested against a live Azure Local 23H2+ instance.
+  in live sandbox batch `b20261117-2111-part3`, `vm_instance` exceeded the default 30m `azapi_resource`
+  create timeout (raised to `60m`) and `03-host-pool` hit a scaling-plan RBAC 400 (`scaling_plan_enabled`
+  now defaults to `false` when `host_placement = "azure-local"`).

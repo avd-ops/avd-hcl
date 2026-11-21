@@ -24,6 +24,7 @@ module "control_plane" {
   remote_apps                = var.remote_apps
   existing_workspace_id      = var.existing_workspace_id
   scaling_plan_name          = "vdscaling-${var.prefix}"
+  scaling_plan_enabled       = var.host_placement == "azure"
   max_sessions_per_host      = var.max_sessions_per_host
   time_zone                  = var.time_zone
   user_group_object_ids      = var.user_group_object_ids

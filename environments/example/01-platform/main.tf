@@ -168,6 +168,7 @@ module "control_plane" {
   private_endpoint_subnet_id = module.network.subnet_ids["private_endpoints"]
   private_dns_zone_id        = try(module.network.private_dns_zone_ids["avd"], null)
   scaling_plan_name          = local.names.scaling_plan
+  scaling_plan_enabled       = var.host_placement == "azure"
   max_sessions_per_host      = var.max_sessions_per_host
   time_zone                  = var.time_zone
   user_group_object_ids      = var.user_group_object_ids
