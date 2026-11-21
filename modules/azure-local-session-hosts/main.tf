@@ -116,6 +116,10 @@ resource "azapi_resource" "vm_instance" {
   sensitive_body_version = {
     "properties.osProfile.adminPassword" = "1"
   }
+
+  timeouts {
+    create = "60m"
+  }
 }
 
 resource "azapi_resource" "aad_login_extension" {
