@@ -19,6 +19,8 @@ locals {
   intune_mdm_id = "0000000a-0000-0000-c000-000000000000"
 
   fslogix_cmd = var.local_smb_profile_path != "" ? "New-Item -Path HKLM:\\SOFTWARE\\FSLogix\\Profiles -Force | Out-Null; Set-ItemProperty -Path HKLM:\\SOFTWARE\\FSLogix\\Profiles -Name Enabled -Value 1 -Type DWord; Set-ItemProperty -Path HKLM:\\SOFTWARE\\FSLogix\\Profiles -Name VHDLocations -Value '${var.local_smb_profile_path}' -Type MultiString; Set-ItemProperty -Path HKLM:\\SOFTWARE\\FSLogix\\Profiles -Name SizeInMBs -Value ${var.fslogix_profile_size_mib} -Type DWord;" : ""
+
+  imds_wait_cmd = "$svc = Get-Service -Name himds -ErrorAction SilentlyContinue; if ($svc -and $svc.Status -ne 'Running') { Start-Service -Name himds -ErrorAction SilentlyContinue }; $imdsOk = $false; for ($n = 0; $n -lt 36; $n++) { try { $r = Invoke-WebRequest -Uri 'http://localhost:40342/metadata/identity/info?api-version=2018-02-01' -Headers @{ Metadata = 'true' } -UseBasicParsing -TimeoutSec 5; if ($r.StatusCode -eq 200) { $imdsOk = $true; break } } catch {}; Start-Sleep -Seconds 5 }; if (-not $imdsOk) { throw 'Arc IMDS (http://localhost:40342) did not become reachable within 180s; verify himds service and Connected Machine agent.' };"
 }
 
 resource "azapi_resource" "hybrid_machine" {
@@ -122,27 +124,6 @@ resource "azapi_resource" "vm_instance" {
   }
 }
 
-resource "azapi_resource" "aad_login_extension" {
-  for_each   = local.hosts
-  type       = "Microsoft.HybridCompute/machines/extensions@2024-07-10"
-  name       = "AADLoginForWindows"
-  parent_id  = azapi_resource.hybrid_machine[each.key].id
-  location   = var.location
-  tags       = local.host_tags
-  depends_on = [azapi_resource.vm_instance]
-
-  body = {
-    properties = {
-      publisher               = "Microsoft.Azure.ActiveDirectory"
-      type                    = "AADLoginForWindows"
-      autoUpgradeMinorVersion = true
-      settings = var.enroll_in_intune ? {
-        mdmId = local.intune_mdm_id
-      } : {}
-    }
-  }
-}
-
 resource "azapi_resource" "avd_config_extension" {
   for_each   = local.hosts
   type       = "Microsoft.HybridCompute/machines/extensions@2024-07-10"
@@ -150,7 +131,7 @@ resource "azapi_resource" "avd_config_extension" {
   parent_id  = azapi_resource.hybrid_machine[each.key].id
   location   = var.location
   tags       = local.host_tags
-  depends_on = [azapi_resource.aad_login_extension]
+  depends_on = [azapi_resource.vm_instance]
 
   body = {
     properties = {
@@ -163,11 +144,32 @@ resource "azapi_resource" "avd_config_extension" {
   sensitive_body = {
     properties = {
       protectedSettings = {
-        commandToExecute = "powershell -ExecutionPolicy Bypass -Command \"${local.fslogix_cmd} New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\RDInfraAgent' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\RDInfraAgent' -Name RegistrationToken -Value '${var.registration_token}' -Type String\""
+        commandToExecute = "powershell -ExecutionPolicy Bypass -Command \"${local.fslogix_cmd} New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\RDInfraAgent' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\RDInfraAgent' -Name RegistrationToken -Value '${var.registration_token}' -Type String; ${local.imds_wait_cmd}\""
       }
     }
   }
   sensitive_body_version = {
     "properties.protectedSettings.commandToExecute" = "1"
+  }
+}
+
+resource "azapi_resource" "aad_login_extension" {
+  for_each   = local.hosts
+  type       = "Microsoft.HybridCompute/machines/extensions@2024-07-10"
+  name       = "AADLoginForWindows"
+  parent_id  = azapi_resource.hybrid_machine[each.key].id
+  location   = var.location
+  tags       = local.host_tags
+  depends_on = [azapi_resource.avd_config_extension]
+
+  body = {
+    properties = {
+      publisher               = "Microsoft.Azure.ActiveDirectory"
+      type                    = "AADLoginForWindows"
+      autoUpgradeMinorVersion = true
+      settings = var.enroll_in_intune ? {
+        mdmId = local.intune_mdm_id
+      } : {}
+    }
   }
 }
