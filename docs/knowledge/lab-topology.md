@@ -24,3 +24,8 @@ last_reviewed: 2026-11-15
 ## Manual prerequisites
 
 See [multi-tenant-lab-bootstrap](https://github.com/avd-ops/avd-ops/blob/main/docs/knowledge/getting-started/multi-tenant-lab-bootstrap.md) for the one-time Portal steps (secondary Entra tenant CAPTCHA, Tenant Root Group elevation toggle, and MCA subscription cap ticket).
+
+## Live vending lessons
+
+- **MCA 24-hour rate limit:** Credit-card MCA accounts enforce a default cap of 5 subscriptions and a **1 new subscription per 24 hours** rate limit. Running multiple `azurerm_subscription` creations in parallel hangs until Terraform's 30-minute `AliasCreate` timeout; vend one subscription per 24 hours with `-target` (or request a cap/rate-limit lift via Billing Support).
+- **Root Group elevation:** Temporarily enable **Access management for Azure resources** in Entra Properties during `00-lab-topology` apply, then turn it back off immediately after.
